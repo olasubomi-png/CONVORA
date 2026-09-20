@@ -19,6 +19,14 @@ import {
   agentPostVisibilityEnum,
 } from "./agent-posts";
 import { customers } from "./customers";
+import { customerNotes } from "./customer-notes";
+import { customerTagLinks } from "./customer-tags";
+import {
+  customerAttributeDefinitions,
+  customerAttributeValues,
+  customerAttributeTypeEnum,
+} from "./customer-attributes";
+
 import {
   conversations,
   conversationStatusEnum,
@@ -57,6 +65,11 @@ export {
   agentPostTypeEnum,
   agentPostVisibilityEnum,
   customers,
+  customerNotes,
+  customerTagLinks,
+  customerAttributeDefinitions,
+  customerAttributeValues,
+  customerAttributeTypeEnum,
   conversations,
   conversationStatusEnum,
   conversationPriorityEnum,
@@ -83,6 +96,11 @@ export const schema = {
   organizationProfiles,
   agentPosts,
   customers,
+  customerNotes,
+  customerTagLinks,
+  customerAttributeDefinitions,
+  customerAttributeValues,
+  customerAttributeTypeEnum,
   conversations,
   conversationParticipants,
   messages,
@@ -134,6 +152,13 @@ export type {
   AgentPostVisibility,
 } from "./agent-posts";
 export type { Customer, NewCustomer } from "./customers";
+export type { CustomerNote, NewCustomerNote } from "./customer-notes";
+export type { CustomerTagLink } from "./customer-tags";
+export type {
+  CustomerAttributeDefinition,
+  CustomerAttributeValue,
+  CustomerAttributeType,
+} from "./customer-attributes";
 export type {
   Conversation,
   NewConversation,

@@ -1,6 +1,6 @@
 # CONVORA architecture
 
-Status: Phase 3 — conversation engine & shared inbox foundation.
+Status: Phase 4 — customer intelligence layer.
 
 ## Layers
 
@@ -85,3 +85,18 @@ Channel APIs, AI, billing, analytics, real-time websockets, file storage.
 - **Read state:** message IDs must belong to the conversation; per-membership only.
 - **closedAt:** set on transition to CLOSED; cleared on reopen to OPEN.
 - **Audit:** `recordAuditEvent(input, executor?)` participates in domain transactions when a tx is passed.
+
+
+## Customer intelligence (Phase 4)
+
+Customers belong to an **organization**, not an agent.
+
+- Org-scoped email uniqueness (nullable emails allowed; non-null unique per org)
+- Shared org tag catalog (`conversation_tags`) linked via `customer_tag_links`
+- Custom attributes: TEXT | NUMBER | BOOLEAN | DATE | SELECT
+- Internal notes (`customer_notes`) — staff only
+- Activity timeline from audit events filtered by `customerId`
+- Stats derived from conversations/messages
+- Merge (OWNER/ADMIN): reassigns conversations/notes/tags/attributes; retires source record
+
+Identity is not global: the same person may exist in multiple organizations as separate customer rows.

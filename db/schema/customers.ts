@@ -5,12 +5,15 @@ import {
   timestamp,
   uuid,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { organizations } from "./organizations";
 
 /**
- * External person communicating with an organization.
- * Not a CONVORA member — no auth fields in Phase 3.
+ * Organization-scoped external contact.
+ * Identity uniqueness is per organization (email/phone), not global.
+ * The same person may exist in multiple organizations as separate records.
  */
 export const customers = pgTable(
   "customers",
@@ -23,13 +26,33 @@ export const customers = pgTable(
     email: text("email"),
     phone: text("phone"),
     avatarUrl: text("avatar_url"),
-    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    companyName: text("company_name"),
+    jobTitle: text("job_title"),
+    location: text("location"),
+    /** Soft internal summary — detailed notes live in customer_notes. */
+    internalSummary: text("internal_summary"),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
     index("customers_organization_id_idx").on(t.organizationId),
     index("customers_org_email_idx").on(t.organizationId, t.email),
+    index("customers_org_phone_idx").on(t.organizationId, t.phone),
+    index("customers_org_name_idx").on(t.organizationId, t.displayName),
+    index("customers_org_company_idx").on(t.organizationId, t.companyName),
+    index("customers_org_created_idx").on(t.organizationId, t.createdAt),
+    // Soft uniqueness: one non-null email per org
+    uniqueIndex("customers_org_email_unique")
+      .on(t.organizationId, t.email)
+      .where(sql`${t.email} IS NOT NULL`),
   ],
 );
 

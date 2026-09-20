@@ -2,7 +2,7 @@
 
 The communication layer between organizations and the people they serve.
 
-**Current status: Phase 3 — conversation engine and shared inbox.**
+**Current status: Phase 4 — customer intelligence.**
 
 ## Overview
 

@@ -1,0 +1,81 @@
+import {
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  uniqueIndex,
+  index,
+  primaryKey,
+} from "drizzle-orm/pg-core";
+import { organizations } from "./organizations";
+import { customers } from "./customers";
+
+export const customerAttributeTypeEnum = pgEnum("customer_attribute_type", [
+  "TEXT",
+  "NUMBER",
+  "BOOLEAN",
+  "DATE",
+  "SELECT",
+]);
+
+export const customerAttributeDefinitions = pgTable(
+  "customer_attribute_definitions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    label: text("label").notNull(),
+    type: customerAttributeTypeEnum("type").notNull(),
+    /** SELECT options: string[] */
+    options: jsonb("options").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("customer_attr_defs_org_key_unique").on(
+      t.organizationId,
+      t.key,
+    ),
+    index("customer_attr_defs_organization_id_idx").on(t.organizationId),
+  ],
+);
+
+export const customerAttributeValues = pgTable(
+  "customer_attribute_values",
+  {
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    definitionId: uuid("definition_id")
+      .notNull()
+      .references(() => customerAttributeDefinitions.id, {
+        onDelete: "cascade",
+      }),
+    valueText: text("value_text"),
+    valueNumber: text("value_number"),
+    valueBoolean: text("value_boolean"),
+    valueDate: timestamp("value_date", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.customerId, t.definitionId] }),
+    index("customer_attr_values_definition_id_idx").on(t.definitionId),
+  ],
+);
+
+export type CustomerAttributeDefinition =
+  typeof customerAttributeDefinitions.$inferSelect;
+export type CustomerAttributeValue =
+  typeof customerAttributeValues.$inferSelect;
+export type CustomerAttributeType =
+  (typeof customerAttributeTypeEnum.enumValues)[number];
