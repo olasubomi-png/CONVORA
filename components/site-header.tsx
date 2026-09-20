@@ -25,12 +25,10 @@ export function SiteHeader() {
             ))}
           </ul>
         </nav>
-        <a
-          href="#contact"
-          className="inline-flex items-center border border-[#141414] bg-[#141414] px-3 py-2 text-sm text-white hover:bg-[#2a2a2a]"
-        >
-          Request access
-        </a>
+        <div className="flex items-center gap-3">
+          <a href="/login" className="text-sm text-[#3f3f3f] hover:text-[#141414]">Sign in</a>
+          <a href="/register" className="inline-flex items-center border border-[#141414] bg-[#141414] px-3 py-2 text-sm text-white hover:bg-[#2a2a2a]">Get started</a>
+        </div>
       </Container>
     </header>
   );
