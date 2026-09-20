@@ -159,6 +159,11 @@ export const conversationAssignmentHistory = pgTable(
     index("conversation_assignment_history_organization_id_idx").on(
       t.organizationId,
     ),
+    foreignKey({
+      columns: [t.organizationId, t.conversationId],
+      foreignColumns: [conversations.organizationId, conversations.id],
+      name: "cah_conversation_org_fk",
+    }).onDelete("cascade"),
   ],
 );
 

@@ -1,6 +1,10 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDatabase } from "@/db";
-import { conversationAssignments, conversations, conversationAssignmentHistory } from "@/db/schema";
+import {
+  conversationAssignments,
+  conversations,
+  conversationAssignmentHistory,
+} from "@/db/schema";
 import {
   requireOrgConversation,
   requireMembershipInOrg,
@@ -12,7 +16,7 @@ import { isUniqueViolation } from "@/lib/db-errors";
 
 /**
  * Assign conversation under row lock so concurrent assigns serialize.
- * Partial unique index guarantees at most one active assignment row.
+ * History action is derived from locked DB state, not the pre-tx snapshot.
  */
 export async function assignConversation(
   actorUserId: string,
@@ -39,10 +43,43 @@ export async function assignConversation(
 
   try {
     return await db.transaction(async (tx) => {
-      // Serialize concurrent assignment attempts on this conversation
       await tx.execute(
         sql`SELECT id FROM conversations WHERE id = ${conversationId} FOR UPDATE`,
       );
+
+      // Authoritative previous assignee under lock
+      const locked = await tx
+        .select({
+          assignedToMembershipId: conversations.assignedToMembershipId,
+          organizationId: conversations.organizationId,
+        })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .limit(1);
+      const current = locked[0];
+      if (!current) {
+        throw new AuthorizationError("Conversation not found.");
+      }
+
+      const previousMembershipId = current.assignedToMembershipId ?? null;
+
+      // Same assignee: no-op (no misleading history)
+      if (previousMembershipId === assigneeMembershipId) {
+        const [existing] = await tx
+          .select()
+          .from(conversationAssignments)
+          .where(
+            and(
+              eq(conversationAssignments.conversationId, conversationId),
+              isNull(conversationAssignments.unassignedAt),
+            ),
+          )
+          .limit(1);
+        return existing;
+      }
+
+      const action =
+        previousMembershipId === null ? "ASSIGN" : "REASSIGN";
 
       await tx
         .update(conversationAssignments)
@@ -76,22 +113,27 @@ export async function assignConversation(
         .where(eq(conversations.id, conversationId));
 
       await tx.insert(conversationAssignmentHistory).values({
-        organizationId: conversation.organizationId,
+        organizationId: current.organizationId,
         conversationId,
         actorMembershipId: membership.id,
-        previousMembershipId: null,
+        previousMembershipId,
         newMembershipId: assigneeMembershipId,
-        action: "ASSIGN",
+        action,
       });
 
       await recordAuditEvent(
         {
-          eventType: "CONVERSATION_ASSIGNED",
+          eventType:
+            action === "REASSIGN"
+              ? "CONVERSATION_ASSIGNED"
+              : "CONVERSATION_ASSIGNED",
           actorUserId,
-          organizationId: conversation.organizationId,
+          organizationId: current.organizationId,
           payload: {
             conversationId,
             membershipId: assigneeMembershipId,
+            previousMembershipId,
+            action,
           },
         },
         tx,
@@ -133,6 +175,22 @@ export async function unassignConversation(
       sql`SELECT id FROM conversations WHERE id = ${conversationId} FOR UPDATE`,
     );
 
+    const locked = await tx
+      .select({
+        assignedToMembershipId: conversations.assignedToMembershipId,
+        organizationId: conversations.organizationId,
+      })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+      .limit(1);
+    const current = locked[0];
+    if (!current) return;
+
+    const previousMembershipId = current.assignedToMembershipId ?? null;
+    if (previousMembershipId === null) {
+      return; // already unassigned
+    }
+
     await tx
       .update(conversationAssignments)
       .set({ unassignedAt: new Date() })
@@ -143,7 +201,6 @@ export async function unassignConversation(
         ),
       );
 
-    const previous = conversation.assignedToMembershipId;
     await tx
       .update(conversations)
       .set({
@@ -153,10 +210,10 @@ export async function unassignConversation(
       .where(eq(conversations.id, conversationId));
 
     await tx.insert(conversationAssignmentHistory).values({
-      organizationId: conversation.organizationId,
+      organizationId: current.organizationId,
       conversationId,
       actorMembershipId: membership.id,
-      previousMembershipId: previous,
+      previousMembershipId,
       newMembershipId: null,
       action: "UNASSIGN",
     });
@@ -165,8 +222,11 @@ export async function unassignConversation(
       {
         eventType: "CONVERSATION_UNASSIGNED",
         actorUserId,
-        organizationId: conversation.organizationId,
-        payload: { conversationId },
+        organizationId: current.organizationId,
+        payload: {
+          conversationId,
+          previousMembershipId,
+        },
       },
       tx,
     );

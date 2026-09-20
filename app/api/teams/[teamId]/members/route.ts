@@ -3,9 +3,11 @@ import {
   addTeamMember,
   listTeamMembers,
   removeTeamMember,
+  setTeamLead,
 } from "@/lib/teams/service";
 import { parseInput, z } from "@/lib/validation";
 import { jsonError, jsonOk } from "@/lib/api/response";
+import { ValidationError } from "@/lib/errors";
 
 type Params = { params: Promise<{ teamId: string }> };
 
@@ -44,13 +46,37 @@ export async function POST(request: Request, { params }: Params) {
   }
 }
 
+export async function PATCH(request: Request, { params }: Params) {
+  try {
+    const auth = await requireAuthenticatedUser();
+    const { teamId } = await params;
+    const body = await request.json();
+    const input = parseInput(
+      z.object({
+        membershipId: z.string().uuid(),
+        role: z.enum(["MEMBER", "LEAD"]),
+      }),
+      body,
+    );
+    const member = await setTeamLead(
+      auth.user.id,
+      teamId,
+      input.membershipId,
+      input.role === "LEAD",
+    );
+    return jsonOk({ member });
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
 export async function DELETE(request: Request, { params }: Params) {
   try {
     const auth = await requireAuthenticatedUser();
     const { teamId } = await params;
     const membershipId = new URL(request.url).searchParams.get("membershipId");
     if (!membershipId) {
-      return jsonError(new Error("membershipId required"));
+      throw new ValidationError("membershipId is required.");
     }
     await removeTeamMember(auth.user.id, teamId, membershipId);
     return jsonOk({ ok: true });

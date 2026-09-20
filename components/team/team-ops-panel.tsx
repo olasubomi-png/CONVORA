@@ -4,11 +4,13 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+type Team = { id: string; name: string; description: string | null };
+
 type Props = {
   organizationId: string;
   membershipId: string;
   role: string;
-  teams: { id: string; name: string; description: string | null }[];
+  teams: Team[];
   unassignedCount: number;
   presence: {
     membershipId: string;
@@ -23,6 +25,10 @@ export function TeamOpsPanel(props: Props) {
   const [teamName, setTeamName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [members, setMembers] = useState<
+    Record<string, { id: string; membershipId: string; role: string }[]>
+  >({});
   const router = useRouter();
   const canManage = props.role === "OWNER" || props.role === "ADMIN";
 
@@ -69,11 +75,38 @@ export function TeamOpsPanel(props: Props) {
     });
   }
 
+  function deleteTeam(teamId: string, name: string) {
+    if (!confirm(`Delete team "${name}"? This cannot be undone.`)) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await fetch(`/api/teams/${teamId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error?.message ?? "Failed to delete");
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function loadMembers(teamId: string) {
+    startTransition(async () => {
+      const res = await fetch(`/api/teams/${teamId}/members`);
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error?.message ?? "Failed to load members");
+        return;
+      }
+      setMembers((m) => ({ ...m, [teamId]: data.members ?? [] }));
+      setExpanded(teamId);
+    });
+  }
+
   return (
     <div className="space-y-8 text-sm">
       <section className="border border-[#e4e4e2] bg-white p-5">
         <h2 className="font-medium">Your presence</h2>
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           {(["ONLINE", "AWAY", "OFFLINE"] as const).map((s) => (
             <button
               key={s}
@@ -104,15 +137,6 @@ export function TeamOpsPanel(props: Props) {
         >
           Open inbox →
         </Link>
-        <ul className="mt-4 space-y-1 text-xs text-[#5c5c5c]">
-          {props.byAgent
-            .filter((a) => a.membershipId)
-            .map((a) => (
-              <li key={a.membershipId}>
-                Agent {a.membershipId?.slice(0, 8)}… — {a.activeCount} active
-              </li>
-            ))}
-        </ul>
       </section>
 
       <section className="border border-[#e4e4e2] bg-white p-5">
@@ -123,16 +147,53 @@ export function TeamOpsPanel(props: Props) {
           <ul className="mt-3 space-y-2">
             {props.teams.map((t) => (
               <li key={t.id} className="border border-[#e4e4e2] px-3 py-2">
-                <span className="font-medium">{t.name}</span>
-                {t.description ? (
-                  <span className="ml-2 text-[#5c5c5c]">{t.description}</span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="font-medium">{t.name}</span>
+                    {t.description ? (
+                      <span className="ml-2 text-[#5c5c5c]">
+                        {t.description}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="text-xs text-[#1f4e3d] hover:underline"
+                      onClick={() => loadMembers(t.id)}
+                    >
+                      Members
+                    </button>
+                    {canManage ? (
+                      <button
+                        type="button"
+                        className="text-xs text-red-700 hover:underline"
+                        onClick={() => deleteTeam(t.id, t.name)}
+                      >
+                        Delete
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                {expanded === t.id && members[t.id] ? (
+                  <ul className="mt-2 space-y-1 text-xs text-[#5c5c5c]">
+                    {(members[t.id] ?? []).length === 0 ? (
+                      <li>No members</li>
+                    ) : (
+                      (members[t.id] ?? []).map((m) => (
+                        <li key={m.id}>
+                          {m.membershipId.slice(0, 8)}… — {m.role}
+                        </li>
+                      ))
+                    )}
+                  </ul>
                 ) : null}
               </li>
             ))}
           </ul>
         )}
         {canManage ? (
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             <input
               value={teamName}
               onChange={(e) => setTeamName(e.target.value)}

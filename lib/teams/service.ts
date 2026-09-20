@@ -63,6 +63,59 @@ export async function createTeam(
   }
 }
 
+
+export async function updateTeam(
+  actorUserId: string,
+  teamId: string,
+  input: { name?: string; description?: string | null },
+) {
+  const db = getDatabase();
+  const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+  if (!team) throw new NotFoundError("Team not found.");
+  await requireAdmin(actorUserId, team.organizationId);
+
+  const patch: { name?: string; description?: string | null; updatedAt: Date } = {
+    updatedAt: new Date(),
+  };
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (!name || name.length > 80) {
+      throw new ValidationError("Team name is required (max 80).");
+    }
+    patch.name = name;
+  }
+  if (input.description !== undefined) {
+    patch.description = input.description?.trim() || null;
+  }
+
+  try {
+    return await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(teams)
+        .set(patch)
+        .where(
+          and(eq(teams.id, teamId), eq(teams.organizationId, team.organizationId)),
+        )
+        .returning();
+      await recordAuditEvent(
+        {
+          eventType: "TEAM_UPDATED",
+          actorUserId,
+          organizationId: team.organizationId,
+          payload: { teamId, ...patch },
+        },
+        tx,
+      );
+      return updated;
+    });
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      throw new ConflictError("A team with this name already exists.");
+    }
+    throw e;
+  }
+}
+
 export async function listTeams(actorUserId: string, organizationId: string) {
   const membership = await getActiveMembership(actorUserId, organizationId);
   if (!membership) {
