@@ -17,6 +17,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "argon2": "^0.41.1",
     "drizzle-orm": "^0.44.5",
     "next": "15.5.18",
     "postgres": "^3.4.7",
