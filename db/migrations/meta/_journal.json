@@ -15,6 +15,13 @@
       "when": 1789892508956,
       "tag": "0001_open_nick_fury",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789894121597,
+      "tag": "0002_clean_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

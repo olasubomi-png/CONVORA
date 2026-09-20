@@ -18,6 +18,26 @@ import {
   agentPostTypeEnum,
   agentPostVisibilityEnum,
 } from "./agent-posts";
+import { customers } from "./customers";
+import {
+  conversations,
+  conversationStatusEnum,
+  conversationPriorityEnum,
+  conversationChannelEnum,
+} from "./conversations";
+import {
+  conversationParticipants,
+  participantRoleEnum,
+} from "./conversation-participants";
+import {
+  messages,
+  messageSenderTypeEnum,
+  messageTypeEnum,
+} from "./messages";
+import { conversationNotes } from "./conversation-notes";
+import { conversationAssignments } from "./conversation-assignments";
+import { conversationTags, conversationTagLinks } from "./conversation-tags";
+import { conversationReadState } from "./conversation-read-state";
 
 export {
   users,
@@ -36,6 +56,21 @@ export {
   agentPosts,
   agentPostTypeEnum,
   agentPostVisibilityEnum,
+  customers,
+  conversations,
+  conversationStatusEnum,
+  conversationPriorityEnum,
+  conversationChannelEnum,
+  conversationParticipants,
+  participantRoleEnum,
+  messages,
+  messageSenderTypeEnum,
+  messageTypeEnum,
+  conversationNotes,
+  conversationAssignments,
+  conversationTags,
+  conversationTagLinks,
+  conversationReadState,
 };
 
 export const schema = {
@@ -47,6 +82,15 @@ export const schema = {
   agentProfiles,
   organizationProfiles,
   agentPosts,
+  customers,
+  conversations,
+  conversationParticipants,
+  messages,
+  conversationNotes,
+  conversationAssignments,
+  conversationTags,
+  conversationTagLinks,
+  conversationReadState,
   userStatusEnum,
   organizationStatusEnum,
   membershipRoleEnum,
@@ -55,6 +99,12 @@ export const schema = {
   profileVisibilityEnum,
   agentPostTypeEnum,
   agentPostVisibilityEnum,
+  conversationStatusEnum,
+  conversationPriorityEnum,
+  conversationChannelEnum,
+  participantRoleEnum,
+  messageSenderTypeEnum,
+  messageTypeEnum,
 };
 
 export type { User, NewUser } from "./users";
@@ -83,3 +133,39 @@ export type {
   AgentPostType,
   AgentPostVisibility,
 } from "./agent-posts";
+export type { Customer, NewCustomer } from "./customers";
+export type {
+  Conversation,
+  NewConversation,
+  ConversationStatus,
+  ConversationPriority,
+  ConversationChannel,
+} from "./conversations";
+export type {
+  ConversationParticipant,
+  NewConversationParticipant,
+  ParticipantRole,
+} from "./conversation-participants";
+export type {
+  Message,
+  NewMessage,
+  MessageSenderType,
+  MessageType,
+} from "./messages";
+export type {
+  ConversationNote,
+  NewConversationNote,
+} from "./conversation-notes";
+export type {
+  ConversationAssignment,
+  NewConversationAssignment,
+} from "./conversation-assignments";
+export type {
+  ConversationTag,
+  NewConversationTag,
+  ConversationTagLink,
+} from "./conversation-tags";
+export type {
+  ConversationReadState,
+  NewConversationReadState,
+} from "./conversation-read-state";
