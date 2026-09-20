@@ -1,108 +1,35 @@
 # CONVORA architecture
 
-Status: Phase 0 foundation. Domain tables, adapters, and product features are not implemented.
+Status: Phase 1 — identity, organizations, and memberships.
 
-## Purpose
-
-CONVORA is the communication layer between organizations and the people they serve. Organizations receive conversations from multiple channels into one operational system that agents work from.
-
-## Core concepts
-
-These concepts are product and domain language. They are not database tables yet.
-
-- **User** — a person with credentials who can sign in.
-- **Organization** — the tenant. Every operational resource belongs to one organization.
-- **Membership** — the relationship between a user and an organization, including role.
-- **Agent** — a membership with permission to work conversations.
-- **Customer** — a person an organization communicates with.
-- **Conversation** — a thread of communication with a customer across one or more channels.
-- **Message** — a single inbound or outbound item in a conversation.
-- **Channel** — a connected transport such as WhatsApp, email, or a website widget.
-
-## Future relationship model
+## Identity model
 
 ```
-Organization
- ├── Members
- ├── Customers
- ├── Conversations
- │    ├── Messages
- │    └── Assignment
- ├── Channels
- └── Settings
+User → Membership (role + status) → Organization
 ```
 
-Authorization will always start from the authenticated user and their memberships. Organization identifiers supplied by the browser are never authoritative.
+- **User** — CONVORA account (email + Argon2id password hash).
+- **Organization** — primary tenant boundary (unique slug).
+- **Membership** — user↔organization with role `OWNER | ADMIN | AGENT` and status `ACTIVE | INVITED | SUSPENDED | REMOVED`.
 
-## Communication architecture
+Ownership is the `OWNER` membership role (partial unique index: one non-REMOVED owner per org). An agent is a user with membership, not a separate auth table. Phase 2 may add `agent_profiles` without changing identity.
 
-```
-WhatsApp
-Facebook
-Instagram
-Email
-Website Widget
-SMS
-       ↓
-Channel adapters
-       ↓
-CONVORA conversation engine
-       ↓
-Shared inbox
-       ↓
-Agents
-```
+## Sessions
 
-Channel adapters translate provider-specific payloads into CONVORA conversation events. The conversation engine must not import WhatsApp, Meta, or carrier SDKs.
+Opaque token → SHA-256 hash in `sessions` → HTTP-only cookie `convora_session` (Secure in production, SameSite=Lax, 14-day expiry, revocable).
 
-Adapters own:
-
-- webhook verification
-- provider authentication
-- payload mapping
-- delivery retries specific to that provider
-
-The core owns:
-
-- conversations and messages
-- assignment and inbox state
-- organization scoping
-- audit events
-
-## Request flow (future)
+## Authorization
 
 ```
-request
-  → authenticated user
-  → organization membership
-  → authorized resource
+request → session → user → active membership → role check → resource
 ```
 
-Not:
+Never trust browser-supplied organizationId. Only ACTIVE memberships in ACTIVE organizations authorize access.
 
-```
-browser → organizationId → database
-```
+## Channel architecture (future)
 
-## Current technical layers
+Providers → channel adapters → conversation engine → shared inbox → agents. Adapters stay isolated from core domain.
 
-- `app/` — Next.js App Router routes and UI
-- `components/` — presentational UI
-- `lib/` — environment, errors, validation, utilities
-- `db/` — Drizzle client and schema (empty domain schema in Phase 0)
-- `docs/` — architecture, security, and development notes
-- `tests/` — unit tests now and Playwright configuration
+## Validation
 
-## Validation principle
-
-```
-Client input
-    ↓
-Validation
-    ↓
-Domain logic
-    ↓
-Database
-```
-
-TypeScript types do not validate runtime input.
+Client input → Zod → domain logic → database.

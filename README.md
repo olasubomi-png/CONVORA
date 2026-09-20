@@ -2,103 +2,52 @@
 
 The communication layer between organizations and the people they serve.
 
+**Current status: Phase 1 — identity, organizations, and memberships.**
+
 ## Overview
 
-CONVORA is a production SaaS product for organizational communication: conversations from multiple channels into one operating system for agents.
+Phase 1 adds users, Argon2id passwords, opaque sessions, organizations, memberships, server-side authorization, and tenant isolation on top of the Phase 0 foundation.
 
-**Current status: Phase 0 — engineering foundation.**
+Not included: conversations, channels, customers, AI, public profiles, billing.
 
-This repository contains the application skeleton, typed environment validation, Drizzle/PostgreSQL setup, error and validation conventions, security and architecture documentation, and a public landing page.
+## Identity model
 
-It does not contain authentication, conversations, AI, channel integrations, or payments.
+```
+User → Membership (role, status) → Organization
+```
 
-## Architecture
-
-Organizations are the tenancy boundary. Users belong to organizations through memberships. Customers, conversations, messages, and channels are organization-owned.
-
-Channel providers (WhatsApp, Facebook, Instagram, email, website widget, SMS) connect through isolated adapters. The conversation engine must not depend on provider SDKs.
-
-See [docs/architecture.md](docs/architecture.md).
-
-## Technology
-
-- Next.js App Router
-- TypeScript (strict)
-- React
-- Tailwind CSS
-- Drizzle ORM
-- PostgreSQL (Neon-compatible)
-- Zod
-- ESLint
-- Vitest
-- Playwright (configured, no Phase 0 browser suite)
+Roles: `OWNER`, `ADMIN`, `AGENT`. Ownership is the OWNER membership role (one non-REMOVED owner per org via partial unique index).
 
 ## Development
 
 ```bash
 npm install
 cp .env.example .env.local
+# set DATABASE_URL and APP_URL
+npm run db:migrate
 npm run dev
 ```
-
-Full notes: [docs/development.md](docs/development.md).
-
-## Environment variables
-
-Server-only variables, validated with Zod:
-
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `APP_URL` | Public origin without a trailing slash |
-| `NODE_ENV` | `development`, `test`, or `production` |
-
-Never commit `.env` or `.env.local`.
 
 ## Testing
 
 ```bash
-npm test
+npm test          # unit + integration (requires PostgreSQL)
 npm run typecheck
 npm run lint
+npm run build
 ```
 
-Unit tests cover environment parsing, error mapping, validation helpers, and utilities.
+## Database tables
 
-## Database
-
-Drizzle is configured. Phase 0 does not define domain tables.
-
-```bash
-npm run db:generate
-npm run db:migrate
-```
-
-These commands need a reachable `DATABASE_URL`. The application typecheck, lint, unit tests, and production build do not require a live database.
+`users`, `organizations`, `memberships`, `sessions`, `audit_events`
 
 ## Security
 
-Multi-tenant rules, secret handling, and future auth constraints are documented in [docs/security.md](docs/security.md).
-
-Do not trust a browser-supplied organization ID.
-
-## Project structure
-
-```
-app/            App Router pages
-components/     Landing page UI
-db/             Drizzle client, schema, migrations
-lib/            Environment, errors, validation, utilities
-tests/          Unit tests and Playwright config target
-docs/           Architecture, security, development
-```
+Argon2id, hashed session tokens, HTTP-only cookies, membership-based authz, tenant isolation at the query layer. See `docs/security.md`.
 
 ## Roadmap
 
-- **Phase 0** — Engineering foundation (this repository state)
-- **Phase 1** — Authentication, organizations, memberships
-- Later — Customers, conversations, channel adapters, agent inbox
-
-## License
-
-Proprietary. All rights reserved.
+- Phase 0 — Engineering foundation
+- Phase 1 — Identity & tenancy (current)
+- Phase 2 — Agent/organization profiles & verification foundations
+- Later — Conversations, channel adapters, inbox
