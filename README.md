@@ -2,7 +2,7 @@
 
 The communication layer between organizations and the people they serve.
 
-**Current status: Phase 7 — Channel Adapter Foundation.**
+**Current status: Phase 8 — WhatsApp Cloud API integration.**
 
 ## Overview
 

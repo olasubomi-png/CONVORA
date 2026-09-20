@@ -20,6 +20,8 @@ const serverEnvSchema = z.object({
   AI_PROVIDER: z.enum(["openai", "mock"]).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
   OPENAI_MODEL: z.string().min(1).default("gpt-4o-mini"),
+  /** Base64-encoded 32-byte AES key for channel credential encryption. */
+  CHANNEL_SECRETS_KEY: z.string().min(1).optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -38,6 +40,7 @@ export function parseServerEnv(
     AI_PROVIDER: source.AI_PROVIDER,
     OPENAI_API_KEY: source.OPENAI_API_KEY,
     OPENAI_MODEL: source.OPENAI_MODEL,
+    CHANNEL_SECRETS_KEY: source.CHANNEL_SECRETS_KEY,
   });
 
   if (!result.success) {
@@ -67,6 +70,7 @@ export function getServerEnv(): ServerEnv {
     AI_PROVIDER: process.env.AI_PROVIDER,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_MODEL: process.env.OPENAI_MODEL,
+    CHANNEL_SECRETS_KEY: process.env.CHANNEL_SECRETS_KEY,
   });
 
   if (!parsed.success) {

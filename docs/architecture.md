@@ -132,3 +132,21 @@ Customer site → `widget.js` → public Web Chat APIs → Conversation Engine �
 - **Widget isolation**: closed Shadow DOM; HTML-escaped messages; accentColor whitelist
 - **Widget isolation**: root container + scoped CSS; message text HTML-escaped
 - AI remains human-approved only
+
+
+## WhatsApp Cloud API (Phase 8)
+
+WhatsApp is a **provider adapter** around the CONVORA Conversation Engine, not a separate conversation system.
+
+```
+WhatsApp Cloud API → Webhook → WhatsAppCloudAdapter
+  → NormalizedInboundMessage → Channel Layer → Conversation Engine
+```
+
+- Provider: `whatsapp_cloud` · Channel: `WHATSAPP`
+- Credentials: AES-256-GCM (`CHANNEL_SECRETS_KEY`), format `v1:iv:ciphertext+tag`
+- Webhook: `GET/POST /api/webhooks/whatsapp` — HMAC-SHA256 `X-Hub-Signature-256` on raw body
+- Conversation reuse: open conversation for org + customer + channel WHATSAPP
+- Inbound idempotency: provider message id as `externalEventId`
+- Outbound: text only; media outbound returns typed unsupported error
+- Media inbound: placeholder text + metadata (no media download yet)

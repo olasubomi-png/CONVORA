@@ -26,6 +26,10 @@ export function getTestDatabaseUrl(): string {
 export function setupTestEnv(): void {
   process.env.DATABASE_URL = TEST_DATABASE_URL;
   process.env.AI_PROVIDER = "mock";
+  // 32 zero bytes base64 — tests only
+  process.env.CHANNEL_SECRETS_KEY =
+    process.env.CHANNEL_SECRETS_KEY ??
+    Buffer.alloc(32, 7).toString("base64");
   process.env.APP_URL = process.env.APP_URL ?? "http://localhost:3000";
   if (!envReady) {
     resetServerEnvCache();

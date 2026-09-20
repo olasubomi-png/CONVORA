@@ -73,3 +73,11 @@ In-memory rate limiter; no email verification; no password reset; invite accepta
 - `ai_generations` / `ai_suggestions` use composite FKs on (organization_id, conversation_id|customer_id|generation_id)
 - Suggestion resolution: `UPDATE … WHERE status = 'PENDING' RETURNING` inside a transaction with audit
 - Concurrent ACCEPT/REJECT: exactly one succeeds
+
+
+## Channel credential encryption
+
+- Algorithm: AES-256-GCM
+- Key: `CHANNEL_SECRETS_KEY` (base64 32-byte) from environment only
+- Ciphertext version prefix `v1:`
+- Missing key → ConfigurationError; never store plaintext tokens in DB for WhatsApp installs

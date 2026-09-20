@@ -45,6 +45,11 @@ export default async function AppLayout({
                   </Link>
                 </li>
                 <li>
+                  <Link href="/app/settings/whatsapp" className="hover:text-[#141414]">
+                    WhatsApp
+                  </Link>
+                </li>
+                <li>
                   <Link href="/app/organization" className="hover:text-[#141414]">
                     Organization
                   </Link>
