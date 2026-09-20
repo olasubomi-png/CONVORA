@@ -21,3 +21,11 @@ with a shared backend (e.g. Redis) before multi-instance production.
 
 ## Known limitations
 In-memory rate limiter; no email verification; no password reset; invite acceptance UI deferred.
+
+
+## Public profiles (Phase 2)
+
+- Public DTOs never include password hashes, session data, or membership IDs.
+- Visibility is enforced in query layer, not only UI.
+- Suspended users, memberships, organizations, and verification-suspended profiles are hidden.
+- Profile updates resolve membership from the session; clients cannot choose arbitrary membership IDs for write authorization.

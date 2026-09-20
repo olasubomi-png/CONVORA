@@ -2,7 +2,7 @@
 
 The communication layer between organizations and the people they serve.
 
-**Current status: Phase 1 — identity, organizations, and memberships.**
+**Current status: Phase 2 — public agent and organization profiles.**
 
 ## Overview
 

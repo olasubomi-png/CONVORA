@@ -41,7 +41,15 @@ export function getTestDb() {
 export async function truncateAllTables(): Promise<void> {
   const db = getTestDb();
   await db.execute(sql`
-    TRUNCATE TABLE audit_events, sessions, memberships, organizations, users
+    TRUNCATE TABLE
+      agent_posts,
+      agent_profiles,
+      organization_profiles,
+      audit_events,
+      sessions,
+      memberships,
+      organizations,
+      users
     RESTART IDENTITY CASCADE
   `);
 }
