@@ -30,6 +30,10 @@ npm run dev
 
 ## Testing
 
+Requires a dedicated test database (`TEST_DATABASE_URL`, name should include `_test`).
+
+
+
 ```bash
 npm test          # unit + integration (requires PostgreSQL)
 npm run typecheck

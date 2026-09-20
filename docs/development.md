@@ -69,3 +69,18 @@ Use `parseInput` / `safeParseInput` from `lib/validation` for request bodies, qu
 ## Errors
 
 Throw typed errors from `lib/errors`. Convert unknown failures with `toPublicError` before returning a response.
+
+
+## Test database
+
+Integration and Playwright tests use a **dedicated** database.
+
+```bash
+export TEST_DATABASE_URL=postgresql://convora:convora@127.0.0.1:5432/convora_test
+export APP_URL=http://localhost:3000
+npm run db:migrate   # apply schema to the test DB (set DATABASE_URL to the same URL)
+npm test
+```
+
+The test helper refuses URLs that do not include `_test` unless `ALLOW_NON_TEST_DB=1`.
+Playwright refuses to start the app server against a non-test `DATABASE_URL`.

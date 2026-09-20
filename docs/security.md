@@ -12,5 +12,12 @@ Argon2id passwords. Hashed session tokens. HTTP-only cookies. Rate limits on reg
 ## Audit
 `audit_events` for USER_REGISTERED, USER_LOGIN, USER_LOGOUT, ORGANIZATION_CREATED, membership events. No secrets in payloads.
 
+## Rate limiting
+
+Auth actions call `checkRateLimit` from `lib/rate-limit.ts`.
+The default provider is process-local (`InMemoryRateLimitProvider`).
+It is **not** distributed protection. Replace via `setRateLimitProvider`
+with a shared backend (e.g. Redis) before multi-instance production.
+
 ## Known limitations
 In-memory rate limiter; no email verification; no password reset; invite acceptance UI deferred.
