@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDatabase } from "@/db";
 import {
   conversations,
@@ -6,11 +6,19 @@ import {
   conversationReadState,
 } from "@/db/schema";
 import { getActiveMembership } from "@/lib/authz/membership";
-import { AuthorizationError } from "@/lib/errors";
+import { AuthorizationError, ValidationError } from "@/lib/errors";
 import type { ConversationStatus } from "@/db/schema";
+import {
+  decodeTimeIdCursor,
+  encodeTimeIdCursor,
+} from "@/lib/conversations/cursors";
 
 const PAGE_SIZE = 30;
+const MAX_PAGE = 100;
 
+/**
+ * Inbox ordering: coalesce(lastMessageAt, createdAt) DESC, id DESC
+ */
 export async function listOrganizationConversations(
   actorUserId: string,
   organizationId: string,
@@ -27,7 +35,10 @@ export async function listOrganizationConversations(
     );
   }
 
-  const limit = Math.min(options?.limit ?? PAGE_SIZE, 100);
+  const limit = Math.min(
+    Math.max(1, options?.limit ?? PAGE_SIZE),
+    MAX_PAGE,
+  );
   const db = getDatabase();
 
   const conditions = [eq(conversations.organizationId, organizationId)];
@@ -36,19 +47,30 @@ export async function listOrganizationConversations(
   }
 
   if (options?.cursor) {
+    const cursor = decodeTimeIdCursor(options.cursor);
+    // Reject cursors that do not belong to this organization
     const anchor = await db
-      .select()
+      .select({
+        id: conversations.id,
+        organizationId: conversations.organizationId,
+      })
       .from(conversations)
-      .where(eq(conversations.id, options.cursor))
+      .where(eq(conversations.id, cursor.id))
       .limit(1);
-    if (anchor[0] && anchor[0].organizationId === organizationId) {
-      conditions.push(
-        lt(
-          conversations.lastMessageAt,
-          anchor[0].lastMessageAt ?? anchor[0].createdAt,
-        ),
-      );
+    if (!anchor[0] || anchor[0].organizationId !== organizationId) {
+      throw new ValidationError("Invalid pagination cursor.");
     }
+
+    const tIso = cursor.createdAt.toISOString();
+    conditions.push(
+      sql`(
+        coalesce(${conversations.lastMessageAt}, ${conversations.createdAt}) < ${tIso}::timestamptz
+        OR (
+          coalesce(${conversations.lastMessageAt}, ${conversations.createdAt}) = ${tIso}::timestamptz
+          AND ${conversations.id} < ${cursor.id}::uuid
+        )
+      )`,
+    );
   }
 
   const rows = await db
@@ -75,7 +97,12 @@ export async function listOrganizationConversations(
       ),
     )
     .where(and(...conditions))
-    .orderBy(desc(sql`coalesce(${conversations.lastMessageAt}, ${conversations.createdAt})`))
+    .orderBy(
+      desc(
+        sql`coalesce(${conversations.lastMessageAt}, ${conversations.createdAt})`,
+      ),
+      desc(conversations.id),
+    )
     .limit(limit);
 
   return {
@@ -96,7 +123,14 @@ export async function listOrganizationConversations(
         r.lastMessageAt != null &&
         (r.lastReadAt == null || r.lastReadAt < r.lastMessageAt),
     })),
-    nextCursor: rows.length === limit ? rows[rows.length - 1]?.id ?? null : null,
+    nextCursor:
+      rows.length === limit && rows[rows.length - 1]
+        ? encodeTimeIdCursor(
+            rows[rows.length - 1]!.lastMessageAt ??
+              rows[rows.length - 1]!.createdAt,
+            rows[rows.length - 1]!.id,
+          )
+        : null,
   };
 }
 

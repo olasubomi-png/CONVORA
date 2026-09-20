@@ -38,3 +38,12 @@ In-memory rate limiter; no email verification; no password reset; invite accepta
 - Cross-tenant post/profile writes return NotFound (non-disclosure).
 - Organization profile: ADMIN/OWNER; organization verification: OWNER only.
 - Post visibility transitions validated; publishedAt preserved across archive/re-publish.
+
+
+## Phase 3 conversation security
+
+- Cross-tenant conversation access returns NotFound.
+- Assignment only to active same-org memberships; one active assignment enforced at DB level.
+- Read-state message IDs cannot reference another conversation.
+- Internal notes are never returned from message list APIs.
+- Audit writes can share the domain transaction so rollbacks remove audit rows too.

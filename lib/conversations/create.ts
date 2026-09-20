@@ -82,12 +82,15 @@ export async function createConversation(
       });
     }
 
-    await recordAuditEvent({
-      eventType: "CONVERSATION_CREATED",
-      actorUserId,
-      organizationId,
-      payload: { conversationId: conversation.id, channel: conversation.channel },
-    });
+    await recordAuditEvent(
+      {
+        eventType: "CONVERSATION_CREATED",
+        actorUserId,
+        organizationId,
+        payload: { conversationId: conversation.id, channel: conversation.channel },
+      },
+      tx,
+    );
 
     return conversation;
   });

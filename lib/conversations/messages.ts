@@ -1,10 +1,15 @@
-import { and, desc, eq, lt, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { getDatabase } from "@/db";
 import { messages, conversations } from "@/db/schema";
 import { requireOrgConversation } from "@/lib/conversations/access";
 import { ValidationError } from "@/lib/errors";
+import {
+  decodeTimeIdCursor,
+  encodeTimeIdCursor,
+} from "@/lib/conversations/cursors";
 
 const PAGE_SIZE = 50;
+const MAX_PAGE = 100;
 
 export async function sendAgentMessage(
   actorUserId: string,
@@ -25,6 +30,7 @@ export async function sendAgentMessage(
     throw new ValidationError("Cannot send messages to a closed conversation.");
   }
 
+  // Membership already verified active + same org via requireOrgConversation
   const db = getDatabase();
   return db.transaction(async (tx) => {
     const [message] = await tx
@@ -49,8 +55,11 @@ export async function sendAgentMessage(
 }
 
 /**
- * Cursor pagination: before = older, after = newer.
- * Default: latest PAGE_SIZE messages ascending for display.
+ * Deterministic cursor pagination on (createdAt, id).
+ *
+ * Default: latest page in chronological order for display.
+ * before: older messages
+ * after: newer messages
  */
 export async function listMessages(
   actorUserId: string,
@@ -58,51 +67,117 @@ export async function listMessages(
   options?: { before?: string; after?: string; limit?: number },
 ) {
   await requireOrgConversation(actorUserId, conversationId);
-  const limit = Math.min(options?.limit ?? PAGE_SIZE, 100);
+
+  if (options?.before && options?.after) {
+    throw new ValidationError("Specify only one of before or after.");
+  }
+
+  const limit = Math.min(
+    Math.max(1, options?.limit ?? PAGE_SIZE),
+    MAX_PAGE,
+  );
   const db = getDatabase();
 
+  const base = and(
+    eq(messages.conversationId, conversationId),
+    isNull(messages.deletedAt),
+  );
+
   if (options?.before) {
-    const anchor = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.id, options.before))
-      .limit(1);
-    if (!anchor[0] || anchor[0].conversationId !== conversationId) {
-      return { messages: [], nextCursor: null };
-    }
+    const cursor = decodeTimeIdCursor(options.before);
+    const tIso = cursor.createdAt.toISOString();
     const rows = await db
       .select()
       .from(messages)
       .where(
         and(
-          eq(messages.conversationId, conversationId),
-          isNull(messages.deletedAt),
-          lt(messages.createdAt, anchor[0].createdAt),
+          base,
+          or(
+            sql`${messages.createdAt} < ${tIso}::timestamptz`,
+            and(
+              sql`${messages.createdAt} = ${tIso}::timestamptz`,
+              sql`${messages.id} < ${cursor.id}::uuid`,
+            ),
+          ),
         ),
       )
-      .orderBy(desc(messages.createdAt))
+      .orderBy(desc(messages.createdAt), desc(messages.id))
       .limit(limit);
+
     const ordered = rows.reverse();
     return {
       messages: ordered,
-      nextCursor: ordered[0]?.id ?? null,
+      nextCursor:
+        ordered.length === limit && ordered[0]
+          ? encodeTimeIdCursor(ordered[0].createdAt, ordered[0].id)
+          : null,
+      prevCursor:
+        ordered.length > 0
+          ? encodeTimeIdCursor(
+              ordered[ordered.length - 1]!.createdAt,
+              ordered[ordered.length - 1]!.id,
+            )
+          : null,
     };
   }
 
+  if (options?.after) {
+    const cursor = decodeTimeIdCursor(options.after);
+    const tIso = cursor.createdAt.toISOString();
+    const rows = await db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          base,
+          or(
+            sql`${messages.createdAt} > ${tIso}::timestamptz`,
+            and(
+              sql`${messages.createdAt} = ${tIso}::timestamptz`,
+              sql`${messages.id} > ${cursor.id}::uuid`,
+            ),
+          ),
+        ),
+      )
+      .orderBy(asc(messages.createdAt), asc(messages.id))
+      .limit(limit);
+
+    return {
+      messages: rows,
+      nextCursor:
+        rows.length === limit && rows[rows.length - 1]
+          ? encodeTimeIdCursor(
+              rows[rows.length - 1]!.createdAt,
+              rows[rows.length - 1]!.id,
+            )
+          : null,
+      prevCursor:
+        rows[0] != null
+          ? encodeTimeIdCursor(rows[0].createdAt, rows[0].id)
+          : null,
+    };
+  }
+
+  // Default: latest page, chronological for display
   const rows = await db
     .select()
     .from(messages)
-    .where(
-      and(
-        eq(messages.conversationId, conversationId),
-        isNull(messages.deletedAt),
-      ),
-    )
-    .orderBy(desc(messages.createdAt))
+    .where(base)
+    .orderBy(desc(messages.createdAt), desc(messages.id))
     .limit(limit);
   const ordered = rows.reverse();
   return {
     messages: ordered,
-    nextCursor: ordered[0]?.id ?? null,
+    nextCursor:
+      ordered.length === limit && ordered[0]
+        ? encodeTimeIdCursor(ordered[0].createdAt, ordered[0].id)
+        : null,
+    prevCursor:
+      ordered.length > 0
+        ? encodeTimeIdCursor(
+            ordered[ordered.length - 1]!.createdAt,
+            ordered[ordered.length - 1]!.id,
+          )
+        : null,
   };
 }

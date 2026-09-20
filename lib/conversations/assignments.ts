@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDatabase } from "@/db";
 import { conversationAssignments, conversations } from "@/db/schema";
 import {
@@ -7,8 +7,13 @@ import {
 } from "@/lib/conversations/access";
 import { recordAuditEvent } from "@/lib/audit";
 import { isAdminRole } from "@/lib/authz/roles";
-import { AuthorizationError } from "@/lib/errors";
+import { AuthorizationError, ConflictError } from "@/lib/errors";
+import { isUniqueViolation } from "@/lib/db-errors";
 
+/**
+ * Assign conversation under row lock so concurrent assigns serialize.
+ * Partial unique index guarantees at most one active assignment row.
+ */
 export async function assignConversation(
   actorUserId: string,
   conversationId: string,
@@ -19,11 +24,7 @@ export async function assignConversation(
     conversationId,
   );
 
-  // AGENT may assign to self; ADMIN/OWNER may assign to anyone in org
-  if (
-    membership.id !== assigneeMembershipId &&
-    !isAdminRole(membership.role)
-  ) {
+  if (membership.id !== assigneeMembershipId && !isAdminRole(membership.role)) {
     throw new AuthorizationError(
       "Agents may only assign conversations to themselves.",
     );
@@ -35,47 +36,68 @@ export async function assignConversation(
   );
 
   const db = getDatabase();
-  return db.transaction(async (tx) => {
-    // Close any open assignment rows
-    await tx
-      .update(conversationAssignments)
-      .set({ unassignedAt: new Date() })
-      .where(
-        and(
-          eq(conversationAssignments.conversationId, conversationId),
-          isNull(conversationAssignments.unassignedAt),
-        ),
+
+  try {
+    return await db.transaction(async (tx) => {
+      // Serialize concurrent assignment attempts on this conversation
+      await tx.execute(
+        sql`SELECT id FROM conversations WHERE id = ${conversationId} FOR UPDATE`,
       );
 
-    const [assignment] = await tx
-      .insert(conversationAssignments)
-      .values({
-        conversationId,
-        membershipId: assigneeMembershipId,
-        assignedByMembershipId: membership.id,
-      })
-      .returning();
+      await tx
+        .update(conversationAssignments)
+        .set({ unassignedAt: new Date() })
+        .where(
+          and(
+            eq(conversationAssignments.conversationId, conversationId),
+            isNull(conversationAssignments.unassignedAt),
+          ),
+        );
 
-    await tx
-      .update(conversations)
-      .set({
-        assignedToMembershipId: assigneeMembershipId,
-        updatedAt: new Date(),
-      })
-      .where(eq(conversations.id, conversationId));
+      const [assignment] = await tx
+        .insert(conversationAssignments)
+        .values({
+          conversationId,
+          membershipId: assigneeMembershipId,
+          assignedByMembershipId: membership.id,
+        })
+        .returning();
 
-    await recordAuditEvent({
-      eventType: "CONVERSATION_ASSIGNED",
-      actorUserId,
-      organizationId: conversation.organizationId,
-      payload: {
-        conversationId,
-        membershipId: assigneeMembershipId,
-      },
+      if (!assignment) {
+        throw new Error("Failed to create assignment");
+      }
+
+      await tx
+        .update(conversations)
+        .set({
+          assignedToMembershipId: assigneeMembershipId,
+          updatedAt: new Date(),
+        })
+        .where(eq(conversations.id, conversationId));
+
+      await recordAuditEvent(
+        {
+          eventType: "CONVERSATION_ASSIGNED",
+          actorUserId,
+          organizationId: conversation.organizationId,
+          payload: {
+            conversationId,
+            membershipId: assigneeMembershipId,
+          },
+        },
+        tx,
+      );
+
+      return assignment;
     });
-
-    return assignment;
-  });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new ConflictError(
+        "Another assignment is already active for this conversation.",
+      );
+    }
+    throw error;
+  }
 }
 
 export async function unassignConversation(
@@ -98,6 +120,10 @@ export async function unassignConversation(
 
   const db = getDatabase();
   return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT id FROM conversations WHERE id = ${conversationId} FOR UPDATE`,
+    );
+
     await tx
       .update(conversationAssignments)
       .set({ unassignedAt: new Date() })
@@ -116,11 +142,14 @@ export async function unassignConversation(
       })
       .where(eq(conversations.id, conversationId));
 
-    await recordAuditEvent({
-      eventType: "CONVERSATION_UNASSIGNED",
-      actorUserId,
-      organizationId: conversation.organizationId,
-      payload: { conversationId },
-    });
+    await recordAuditEvent(
+      {
+        eventType: "CONVERSATION_UNASSIGNED",
+        actorUserId,
+        organizationId: conversation.organizationId,
+        payload: { conversationId },
+      },
+      tx,
+    );
   });
 }

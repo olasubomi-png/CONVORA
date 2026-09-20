@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "conversation_assignments_one_active" ON "conversation_assignments" USING btree ("conversation_id") WHERE "conversation_assignments"."unassigned_at" IS NULL;

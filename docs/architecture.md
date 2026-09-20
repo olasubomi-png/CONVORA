@@ -75,3 +75,13 @@ Phase 2 public profiles do not expose conversations. Full anonymous web-chat ide
 ## Out of scope
 
 Channel APIs, AI, billing, analytics, real-time websockets, file storage.
+
+
+## Phase 3 hardening notes
+
+- **Assignments:** partial unique index on active rows (`unassigned_at IS NULL`); `SELECT … FOR UPDATE` on conversation during assign/unassign.
+- **Message pagination:** opaque time+id cursors; deterministic `(createdAt, id)` ordering; `before` / `after` supported.
+- **Inbox list:** ordered by `coalesce(lastMessageAt, createdAt) DESC, id DESC` with the same cursor scheme.
+- **Read state:** message IDs must belong to the conversation; per-membership only.
+- **closedAt:** set on transition to CLOSED; cleared on reopen to OPEN.
+- **Audit:** `recordAuditEvent(input, executor?)` participates in domain transactions when a tx is passed.

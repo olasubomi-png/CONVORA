@@ -1,7 +1,8 @@
+import { and, desc, eq } from "drizzle-orm";
 import { getDatabase } from "@/db";
 import { conversationReadState, messages } from "@/db/schema";
 import { requireOrgConversation } from "@/lib/conversations/access";
-import { desc, eq } from "drizzle-orm";
+import { NotFoundError, ValidationError } from "@/lib/errors";
 
 export async function markConversationRead(
   actorUserId: string,
@@ -16,14 +17,37 @@ export async function markConversationRead(
   const db = getDatabase();
   let lastReadMessageId = messageId ?? null;
 
-  if (!lastReadMessageId) {
+  if (messageId) {
+    const rows = await db
+      .select({
+        id: messages.id,
+        conversationId: messages.conversationId,
+      })
+      .from(messages)
+      .where(eq(messages.id, messageId))
+      .limit(1);
+    const msg = rows[0];
+    if (!msg || msg.conversationId !== conversationId) {
+      // Non-disclosure: do not confirm whether the message exists elsewhere
+      throw new NotFoundError("Message not found.");
+    }
+    lastReadMessageId = msg.id;
+  } else {
     const latest = await db
       .select({ id: messages.id })
       .from(messages)
-      .where(eq(messages.conversationId, conversationId))
-      .orderBy(desc(messages.createdAt))
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+        ),
+      )
+      .orderBy(desc(messages.createdAt), desc(messages.id))
       .limit(1);
     lastReadMessageId = latest[0]?.id ?? null;
+  }
+
+  if (messageId && !lastReadMessageId) {
+    throw new ValidationError("Message not found.");
   }
 
   await db

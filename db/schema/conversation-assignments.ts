@@ -1,8 +1,12 @@
-import { pgTable, timestamp, uuid, index } from "drizzle-orm/pg-core";
+import { pgTable, timestamp, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { conversations } from "./conversations";
 import { memberships } from "./memberships";
 
-/** Assignment history — current assignee also denormalized on conversations. */
+/**
+ * Assignment history. At most one active assignment per conversation
+ * (partial unique index where unassigned_at IS NULL).
+ */
 export const conversationAssignments = pgTable(
   "conversation_assignments",
   {
@@ -17,12 +21,17 @@ export const conversationAssignments = pgTable(
       () => memberships.id,
       { onDelete: "set null" },
     ),
-    assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
+    assignedAt: timestamp("assigned_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     unassignedAt: timestamp("unassigned_at", { withTimezone: true }),
   },
   (t) => [
     index("conversation_assignments_conversation_id_idx").on(t.conversationId),
     index("conversation_assignments_membership_id_idx").on(t.membershipId),
+    uniqueIndex("conversation_assignments_one_active")
+      .on(t.conversationId)
+      .where(sql`${t.unassignedAt} IS NULL`),
   ],
 );
 
