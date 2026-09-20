@@ -5,6 +5,7 @@ import {
   timestamp,
   uuid,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { organizations } from "./organizations";
 import { customers } from "./customers";
@@ -61,6 +62,7 @@ export const conversations = pgTable(
   },
   (t) => [
     index("conversations_organization_id_idx").on(t.organizationId),
+    uniqueIndex("conversations_org_id_unique").on(t.organizationId, t.id),
     index("conversations_org_status_idx").on(t.organizationId, t.status),
     index("conversations_org_last_message_idx").on(
       t.organizationId,

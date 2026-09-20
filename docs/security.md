@@ -66,3 +66,10 @@ In-memory rate limiter; no email verification; no password reset; invite accepta
 - AI output validated with Zod before use
 - Audit events record generation ids/types without full conversation bodies
 - Missing AI config → ConfigurationError (503), does not break non-AI features
+
+
+## AI composite FKs & suggestion atomicity
+
+- `ai_generations` / `ai_suggestions` use composite FKs on (organization_id, conversation_id|customer_id|generation_id)
+- Suggestion resolution: `UPDATE … WHERE status = 'PENDING' RETURNING` inside a transaction with audit
+- Concurrent ACCEPT/REJECT: exactly one succeeds

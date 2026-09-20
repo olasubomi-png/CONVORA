@@ -57,6 +57,13 @@
       "when": 1789900562408,
       "tag": "0007_long_loners",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789901220119,
+      "tag": "0008_watery_stingray",
+      "breakpoints": true
     }
   ]
 }

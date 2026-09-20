@@ -7,6 +7,8 @@ import {
   integer,
   jsonb,
   index,
+  uniqueIndex,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { organizations } from "./organizations";
 import { users } from "./users";
@@ -39,8 +41,8 @@ export const aiSuggestionStatusEnum = pgEnum("ai_suggestion_status", [
 ]);
 
 /**
- * One row per AI generation request. Does not store full prompts/responses
- * by default — only safe metadata and structured outputs when useful.
+ * AI generation records. Composite FKs enforce that conversation/customer
+ * rows belong to the same organization as the generation.
  */
 export const aiGenerations = pgTable(
   "ai_generations",
@@ -56,12 +58,8 @@ export const aiGenerations = pgTable(
       () => memberships.id,
       { onDelete: "set null" },
     ),
-    conversationId: uuid("conversation_id").references(() => conversations.id, {
-      onDelete: "set null",
-    }),
-    customerId: uuid("customer_id").references(() => customers.id, {
-      onDelete: "set null",
-    }),
+    conversationId: uuid("conversation_id"),
+    customerId: uuid("customer_id"),
     provider: text("provider").notNull(),
     model: text("model").notNull(),
     generationType: aiGenerationTypeEnum("generation_type").notNull(),
@@ -72,7 +70,6 @@ export const aiGenerations = pgTable(
     latencyMs: integer("latency_ms"),
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
-    /** Structured, non-sensitive result payload (validated). */
     result: jsonb("result").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -85,12 +82,22 @@ export const aiGenerations = pgTable(
     index("ai_generations_customer_id_idx").on(t.customerId),
     index("ai_generations_type_idx").on(t.generationType),
     index("ai_generations_created_at_idx").on(t.createdAt),
+    uniqueIndex("ai_generations_org_id_unique").on(t.organizationId, t.id),
+    foreignKey({
+      columns: [t.organizationId, t.conversationId],
+      foreignColumns: [conversations.organizationId, conversations.id],
+      name: "ai_generations_conversation_org_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [t.organizationId, t.customerId],
+      foreignColumns: [customers.organizationId, customers.id],
+      name: "ai_generations_customer_org_fk",
+    }).onDelete("set null"),
   ],
 );
 
 /**
- * Agent-facing suggestions that may be accepted/rejected.
- * Never written as customer-facing messages automatically.
+ * Agent-facing suggestions. Same-org as generation, conversation, customer.
  */
 export const aiSuggestions = pgTable(
   "ai_suggestions",
@@ -99,18 +106,11 @@ export const aiSuggestions = pgTable(
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    generationId: uuid("generation_id")
-      .notNull()
-      .references(() => aiGenerations.id, { onDelete: "cascade" }),
-    conversationId: uuid("conversation_id").references(() => conversations.id, {
-      onDelete: "cascade",
-    }),
-    customerId: uuid("customer_id").references(() => customers.id, {
-      onDelete: "cascade",
-    }),
+    generationId: uuid("generation_id").notNull(),
+    conversationId: uuid("conversation_id"),
+    customerId: uuid("customer_id"),
     suggestionType: aiGenerationTypeEnum("suggestion_type").notNull(),
     status: aiSuggestionStatusEnum("status").notNull().default("PENDING"),
-    /** Draft text or structured content for the agent to review. */
     content: jsonb("content").$type<Record<string, unknown>>().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -125,6 +125,21 @@ export const aiSuggestions = pgTable(
     index("ai_suggestions_organization_id_idx").on(t.organizationId),
     index("ai_suggestions_conversation_id_idx").on(t.conversationId),
     index("ai_suggestions_status_idx").on(t.status),
+    foreignKey({
+      columns: [t.organizationId, t.generationId],
+      foreignColumns: [aiGenerations.organizationId, aiGenerations.id],
+      name: "ai_suggestions_generation_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.organizationId, t.conversationId],
+      foreignColumns: [conversations.organizationId, conversations.id],
+      name: "ai_suggestions_conversation_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.organizationId, t.customerId],
+      foreignColumns: [customers.organizationId, customers.id],
+      name: "ai_suggestions_customer_org_fk",
+    }).onDelete("cascade"),
   ],
 );
 
