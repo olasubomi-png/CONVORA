@@ -12,6 +12,7 @@ import {
 import { organizations } from "./organizations";
 import { customers } from "./customers";
 import { conversations } from "./conversations";
+import { messages } from "./messages";
 
 export const webChatInstallationStatusEnum = pgEnum(
   "web_chat_installation_status",
@@ -31,9 +32,7 @@ export const webChatInstallations = pgTable(
     publicKey: text("public_key").notNull(),
     name: text("name").notNull(),
     status: webChatInstallationStatusEnum("status").notNull().default("ACTIVE"),
-    /** Allowed origins e.g. ["https://example.com"] — empty = any (dev) */
     allowedOrigins: jsonb("allowed_origins").$type<string[]>().notNull().default([]),
-    /** Branding / appearance config */
     config: jsonb("config")
       .$type<{
         displayName?: string;
@@ -62,8 +61,8 @@ export const webChatInstallations = pgTable(
 );
 
 /**
- * Anonymous visitor session bound to an installation (and thus org).
- * sessionToken is a high-entropy secret issued by the server.
+ * Anonymous visitor session. sessionTokenHash only; expiresAt enforced.
+ * Default TTL: 30 days from creation / resume.
  */
 export const webChatVisitors = pgTable(
   "web_chat_visitors",
@@ -76,6 +75,7 @@ export const webChatVisitors = pgTable(
     conversationId: uuid("conversation_id"),
     displayName: text("display_name"),
     email: text("email"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -110,5 +110,38 @@ export const webChatVisitors = pgTable(
   ],
 );
 
+/**
+ * Idempotency keys for visitor message creates.
+ * Unique (conversation_id, client_message_id).
+ */
+export const webChatMessageIdempotency = pgTable(
+  "web_chat_message_idempotency",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id").notNull(),
+    conversationId: uuid("conversation_id").notNull(),
+    clientMessageId: text("client_message_id").notNull(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("web_chat_msg_idem_conv_client_unique").on(
+      t.conversationId,
+      t.clientMessageId,
+    ),
+    foreignKey({
+      columns: [t.organizationId, t.conversationId],
+      foreignColumns: [conversations.organizationId, conversations.id],
+      name: "web_chat_msg_idem_conversation_org_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
 export type WebChatInstallation = typeof webChatInstallations.$inferSelect;
 export type WebChatVisitor = typeof webChatVisitors.$inferSelect;
+export type WebChatMessageIdempotency =
+  typeof webChatMessageIdempotency.$inferSelect;

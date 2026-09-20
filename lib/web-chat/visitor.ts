@@ -1,7 +1,9 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { getDatabase } from "@/db";
 import {
   webChatVisitors,
+  webChatInstallations,
+  webChatMessageIdempotency,
   customers,
   conversations,
   messages,
@@ -22,6 +24,55 @@ import {
   RateLimitError,
   AuthorizationError,
 } from "@/lib/errors";
+import { isUniqueViolation } from "@/lib/db-errors";
+
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+function sessionExpiresAt(from = new Date()): Date {
+  return new Date(from.getTime() + SESSION_TTL_MS);
+}
+
+async function loadVisitorByToken(sessionToken: string) {
+  const db = getDatabase();
+  const hash = hashSessionToken(sessionToken);
+  const rows = await db
+    .select()
+    .from(webChatVisitors)
+    .where(eq(webChatVisitors.sessionTokenHash, hash))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Require a valid, non-expired visitor session whose installation is ACTIVE.
+ */
+export async function requireVisitorSession(sessionToken: string) {
+  if (!sessionToken) {
+    throw new AuthorizationError("Visitor session is required.");
+  }
+  const visitor = await loadVisitorByToken(sessionToken);
+  if (!visitor) {
+    throw new NotFoundError("Visitor session not found.");
+  }
+  if (visitor.expiresAt.getTime() <= Date.now()) {
+    throw new AuthorizationError("Visitor session has expired.");
+  }
+
+  const db = getDatabase();
+  const [installation] = await db
+    .select()
+    .from(webChatInstallations)
+    .where(eq(webChatInstallations.id, visitor.installationId))
+    .limit(1);
+  if (!installation || installation.status !== "ACTIVE") {
+    throw new NotFoundError("Installation not found.");
+  }
+  if (installation.organizationId !== visitor.organizationId) {
+    throw new NotFoundError("Visitor session not found.");
+  }
+
+  return { visitor, installation };
+}
 
 export async function createOrResumeVisitorSession(input: {
   publicKey: string;
@@ -42,32 +93,36 @@ export async function createOrResumeVisitorSession(input: {
     throw new RateLimitError("Too many session requests.");
   }
 
+  // Invalid-key probing is also limited globally per key prefix
+  checkRateLimit({
+    key: `wc:key:${input.publicKey.slice(0, 16)}`,
+    limit: 120,
+    windowMs: 60_000,
+  });
+
   const db = getDatabase();
 
   if (input.sessionToken) {
-    const hash = hashSessionToken(input.sessionToken);
-    const rows = await db
-      .select()
-      .from(webChatVisitors)
-      .where(eq(webChatVisitors.sessionTokenHash, hash))
-      .limit(1);
-    const visitor = rows[0];
+    const visitor = await loadVisitorByToken(input.sessionToken);
     if (
       visitor &&
       visitor.installationId === installation.id &&
-      visitor.organizationId === installation.organizationId
+      visitor.organizationId === installation.organizationId &&
+      visitor.expiresAt.getTime() > Date.now()
     ) {
+      const expiresAt = sessionExpiresAt();
       await db
         .update(webChatVisitors)
-        .set({ lastSeenAt: new Date() })
+        .set({ lastSeenAt: new Date(), expiresAt })
         .where(eq(webChatVisitors.id, visitor.id));
       return {
         sessionToken: input.sessionToken,
-        visitor,
+        visitor: { ...visitor, expiresAt },
         installation,
         config: installation.config,
       };
     }
+    // Token invalid/expired/wrong installation → create new (do not revive)
   }
 
   const sessionToken = generateSessionToken();
@@ -77,6 +132,7 @@ export async function createOrResumeVisitorSession(input: {
       organizationId: installation.organizationId,
       installationId: installation.id,
       sessionTokenHash: hashSessionToken(sessionToken),
+      expiresAt: sessionExpiresAt(),
     })
     .returning();
   if (!visitor) throw new Error("Failed to create visitor");
@@ -89,46 +145,32 @@ export async function createOrResumeVisitorSession(input: {
   };
 }
 
-export async function requireVisitorSession(sessionToken: string) {
-  if (!sessionToken) {
-    throw new AuthorizationError("Visitor session is required.");
-  }
-  const db = getDatabase();
-  const hash = hashSessionToken(sessionToken);
-  const rows = await db
-    .select()
-    .from(webChatVisitors)
-    .where(eq(webChatVisitors.sessionTokenHash, hash))
-    .limit(1);
-  const visitor = rows[0];
-  if (!visitor) {
-    throw new NotFoundError("Visitor session not found.");
-  }
-  return visitor;
-}
-
 /**
- * Ensure visitor has a customer + open conversation for this installation.
+ * Ensure visitor has customer + conversation. Uses row lock to prevent races.
  */
 export async function ensureVisitorConversation(visitorId: string) {
   const db = getDatabase();
-  const rows = await db
-    .select()
-    .from(webChatVisitors)
-    .where(eq(webChatVisitors.id, visitorId))
-    .limit(1);
-  const visitor = rows[0];
-  if (!visitor) throw new NotFoundError("Visitor session not found.");
-
-  if (visitor.conversationId && visitor.customerId) {
-    return {
-      visitor,
-      conversationId: visitor.conversationId,
-      customerId: visitor.customerId,
-    };
-  }
-
   return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT id FROM web_chat_visitors WHERE id = ${visitorId} FOR UPDATE`,
+    );
+
+    const rows = await tx
+      .select()
+      .from(webChatVisitors)
+      .where(eq(webChatVisitors.id, visitorId))
+      .limit(1);
+    const visitor = rows[0];
+    if (!visitor) throw new NotFoundError("Visitor session not found.");
+
+    if (visitor.conversationId && visitor.customerId) {
+      return {
+        visitor,
+        conversationId: visitor.conversationId,
+        customerId: visitor.customerId,
+      };
+    }
+
     let customerId = visitor.customerId;
     if (!customerId) {
       const [customer] = await tx
@@ -136,7 +178,7 @@ export async function ensureVisitorConversation(visitorId: string) {
         .values({
           organizationId: visitor.organizationId,
           displayName: visitor.displayName?.trim() || "Website visitor",
-          email: visitor.email?.toLowerCase() ?? null,
+          email: visitor.email ? visitor.email.trim().toLowerCase() : null,
         })
         .returning();
       if (!customer) throw new Error("Failed to create customer");
@@ -177,8 +219,8 @@ export async function ensureVisitorConversation(visitorId: string) {
 
     return {
       visitor: updated ?? visitor,
-      conversationId: conversationId!,
-      customerId: customerId!,
+      conversationId,
+      customerId,
     };
   });
 }
@@ -193,7 +235,8 @@ export async function sendVisitorMessage(
     throw new ValidationError("Message must be 1–4000 characters.");
   }
 
-  const visitor = await requireVisitorSession(sessionToken);
+  const { visitor } = await requireVisitorSession(sessionToken);
+
   const rl = checkRateLimit({
     key: `wc:msg:${visitor.id}`,
     limit: 30,
@@ -209,67 +252,119 @@ export async function sendVisitorMessage(
 
   const db = getDatabase();
 
-  // Idempotency via metadata.clientMessageId
   if (clientMessageId) {
+    // Fast path: existing idempotency row
     const existing = await db
       .select()
-      .from(messages)
-      .where(eq(messages.conversationId, conversationId));
-    const match = existing.find(
-      (m) =>
-        (m.metadata as { clientMessageId?: string } | null)?.clientMessageId ===
-        clientMessageId,
-    );
-    if (match) return match;
+      .from(webChatMessageIdempotency)
+      .where(
+        and(
+          eq(webChatMessageIdempotency.conversationId, conversationId),
+          eq(webChatMessageIdempotency.clientMessageId, clientMessageId),
+        ),
+      )
+      .limit(1);
+    if (existing[0]) {
+      const [msg] = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, existing[0].messageId))
+        .limit(1);
+      if (msg) return msg;
+    }
   }
 
-  return db.transaction(async (tx) => {
-    const [message] = await tx
-      .insert(messages)
-      .values({
-        conversationId,
-        senderType: "CUSTOMER",
-        senderCustomerId: customerId,
-        body: trimmed,
-        messageType: "TEXT",
-        metadata: clientMessageId ? { clientMessageId } : {},
-      })
-      .returning();
-    if (!message) throw new Error("Failed to create message");
+  try {
+    return await db.transaction(async (tx) => {
+      const [message] = await tx
+        .insert(messages)
+        .values({
+          conversationId,
+          senderType: "CUSTOMER",
+          senderCustomerId: customerId,
+          body: trimmed,
+          messageType: "TEXT",
+          metadata: clientMessageId ? { clientMessageId } : {},
+        })
+        .returning();
+      if (!message) throw new Error("Failed to create message");
 
-    await tx
-      .update(conversations)
-      .set({ lastMessageAt: message.createdAt, updatedAt: new Date() })
-      .where(eq(conversations.id, conversationId));
+      if (clientMessageId) {
+        await tx.insert(webChatMessageIdempotency).values({
+          organizationId: visitor.organizationId,
+          conversationId,
+          clientMessageId,
+          messageId: message.id,
+        });
+      }
 
-    return message;
-  });
+      await tx
+        .update(conversations)
+        .set({ lastMessageAt: message.createdAt, updatedAt: new Date() })
+        .where(eq(conversations.id, conversationId));
+
+      return message;
+    });
+  } catch (error) {
+    if (clientMessageId && isUniqueViolation(error)) {
+      const existing = await db
+        .select()
+        .from(webChatMessageIdempotency)
+        .where(
+          and(
+            eq(webChatMessageIdempotency.conversationId, conversationId),
+            eq(webChatMessageIdempotency.clientMessageId, clientMessageId),
+          ),
+        )
+        .limit(1);
+      if (existing[0]) {
+        const [msg] = await db
+          .select()
+          .from(messages)
+          .where(eq(messages.id, existing[0].messageId))
+          .limit(1);
+        if (msg) return msg;
+      }
+    }
+    throw error;
+  }
 }
 
 export async function listVisitorMessages(
   sessionToken: string,
-  options?: { after?: string; limit?: number },
+  options?: { afterId?: string; limit?: number },
 ) {
-  const visitor = await requireVisitorSession(sessionToken);
+  const { visitor } = await requireVisitorSession(sessionToken);
   if (!visitor.conversationId) {
-    return { messages: [], conversationId: null };
+    return { messages: [] as const, conversationId: null as string | null };
   }
 
-  // Verify conversation still belongs to visitor org
   const db = getDatabase();
   const conv = await db
     .select()
     .from(conversations)
     .where(eq(conversations.id, visitor.conversationId))
     .limit(1);
-  if (
-    !conv[0] ||
-    conv[0].organizationId !== visitor.organizationId
-  ) {
+  if (!conv[0] || conv[0].organizationId !== visitor.organizationId) {
     throw new NotFoundError("Conversation not found.");
   }
 
   const limit = Math.min(Math.max(1, options?.limit ?? 50), 100);
+  const conditions = [eq(messages.conversationId, visitor.conversationId)];
+
+  if (options?.afterId) {
+    const [anchor] = await db
+      .select({ createdAt: messages.createdAt, id: messages.id })
+      .from(messages)
+      .where(eq(messages.id, options.afterId))
+      .limit(1);
+    if (anchor) {
+      conditions.push(
+        sql`(${messages.createdAt} > ${anchor.createdAt} OR (${messages.createdAt} = ${anchor.createdAt} AND ${messages.id} > ${anchor.id}))`,
+      );
+    }
+  }
+
   const rows = await db
     .select({
       id: messages.id,
@@ -278,8 +373,8 @@ export async function listVisitorMessages(
       createdAt: messages.createdAt,
     })
     .from(messages)
-    .where(eq(messages.conversationId, visitor.conversationId))
-    .orderBy(asc(messages.createdAt))
+    .where(and(...conditions))
+    .orderBy(asc(messages.createdAt), asc(messages.id))
     .limit(limit);
 
   return {
@@ -287,8 +382,7 @@ export async function listVisitorMessages(
     messages: rows.map((m) => ({
       id: m.id,
       body: m.body,
-      // Do not expose internal sender membership IDs
-      role: m.senderType === "CUSTOMER" ? "visitor" : "agent",
+      role: m.senderType === "CUSTOMER" ? ("visitor" as const) : ("agent" as const),
       createdAt: m.createdAt,
     })),
   };

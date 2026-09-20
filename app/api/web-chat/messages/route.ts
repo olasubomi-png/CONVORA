@@ -1,7 +1,6 @@
 import {
   sendVisitorMessage,
   listVisitorMessages,
-  requireVisitorSession,
 } from "@/lib/web-chat/visitor";
 import { parseInput, z } from "@/lib/validation";
 import { jsonError, jsonOk } from "@/lib/api/response";
@@ -21,8 +20,8 @@ const postSchema = z.object({
 export async function GET(request: Request) {
   try {
     const token = sessionFromRequest(request);
-    await requireVisitorSession(token);
-    const result = await listVisitorMessages(token);
+    const afterId = new URL(request.url).searchParams.get("after") ?? undefined;
+    const result = await listVisitorMessages(token, { afterId });
     return jsonOk(result);
   } catch (error) {
     return jsonError(error);

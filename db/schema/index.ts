@@ -58,6 +58,7 @@ import {
 import {
   webChatInstallations,
   webChatVisitors,
+  webChatMessageIdempotency,
   webChatInstallationStatusEnum,
 } from "./web-chat";
 
@@ -106,6 +107,7 @@ export {
   aiSuggestionStatusEnum,
   webChatInstallations,
   webChatVisitors,
+  webChatMessageIdempotency,
   webChatInstallationStatusEnum,
 };
 
@@ -185,4 +187,4 @@ export type {
   AiGenerationStatus,
   AiSuggestionStatus,
 } from "./ai";
-export type { WebChatInstallation, WebChatVisitor } from "./web-chat";
+export type { WebChatInstallation, WebChatVisitor, WebChatMessageIdempotency } from "./web-chat";

@@ -126,6 +126,9 @@ Customer site → `widget.js` → public Web Chat APIs → Conversation Engine �
 
 - **Installation**: org-scoped, public key identifier (not a secret), allowed origins, branding config
 - **Visitor session**: server-issued token (SHA-256 stored); maps to customer + conversation
-- **Realtime**: visitor→server HTTP; server→visitor polling/SSE-style refresh (3s poll in widget)
+- **Visitor session**: 32-byte random token; only SHA-256 stored; TTL 30 days (`expiresAt`); bound to installation+org
+- **Message idempotency**: unique `(conversation_id, client_message_id)` table
+- **Realtime**: visitor→server HTTP; server→visitor **polling** (3s) with `?after=` cursor — not true push
+- **Widget isolation**: closed Shadow DOM; HTML-escaped messages; accentColor whitelist
 - **Widget isolation**: root container + scoped CSS; message text HTML-escaped
 - AI remains human-approved only

@@ -211,12 +211,79 @@ export async function resolveActiveInstallationByPublicKey(publicKey: string) {
   return installation;
 }
 
+/**
+ * Exact origin match (scheme + host + port). No substring/wildcard matching.
+ */
 export function assertOriginAllowed(
   installation: { allowedOrigins: string[] },
   origin: string | null,
 ): void {
   if (!installation.allowedOrigins.length) return;
-  if (!origin || !installation.allowedOrigins.includes(origin)) {
+  if (!origin) {
     throw new AuthorizationError("Origin is not allowed for this installation.");
   }
+  let normalized: string;
+  try {
+    normalized = new URL(origin).origin;
+  } catch {
+    throw new AuthorizationError("Origin is not allowed for this installation.");
+  }
+  const allowed = installation.allowedOrigins.map((o) => {
+    try {
+      return new URL(o).origin;
+    } catch {
+      return null;
+    }
+  }).filter((x): x is string => x !== null);
+
+  if (!allowed.includes(normalized)) {
+    throw new AuthorizationError("Origin is not allowed for this installation.");
+  }
+}
+
+export async function rotateInstallationPublicKey(
+  actorUserId: string,
+  installationId: string,
+) {
+  const db = getDatabase();
+  const rows = await db
+    .select()
+    .from(webChatInstallations)
+    .where(eq(webChatInstallations.id, installationId))
+    .limit(1);
+  const installation = rows[0];
+  if (!installation) throw new NotFoundError("Installation not found.");
+
+  const membership = await getActiveMembership(
+    actorUserId,
+    installation.organizationId,
+  );
+  if (!membership || !isAdminRole(membership.role)) {
+    throw new AuthorizationError(
+      "Only admins or owners can manage Web Chat installations.",
+    );
+  }
+
+  return db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(webChatInstallations)
+      .set({
+        publicKey: generatePublicKey(),
+        updatedAt: new Date(),
+      })
+      .where(eq(webChatInstallations.id, installationId))
+      .returning();
+
+    await recordAuditEvent(
+      {
+        eventType: "WEB_CHAT_INSTALLATION_KEY_ROTATED",
+        actorUserId,
+        organizationId: installation.organizationId,
+        payload: { installationId },
+      },
+      tx,
+    );
+
+    return updated;
+  });
 }
