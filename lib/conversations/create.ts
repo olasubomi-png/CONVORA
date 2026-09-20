@@ -42,7 +42,7 @@ export async function createConversation(
     throw new NotFoundError("Customer not found.");
   }
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [conversation] = await tx
       .insert(conversations)
       .values({
@@ -87,11 +87,32 @@ export async function createConversation(
         eventType: "CONVERSATION_CREATED",
         actorUserId,
         organizationId,
-        payload: { conversationId: conversation.id, channel: conversation.channel },
+        payload: {
+          conversationId: conversation.id,
+          channel: conversation.channel,
+        },
       },
       tx,
     );
 
     return conversation;
   });
+
+  void import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
+    dispatchAutomationEvent({
+      organizationId,
+      triggerType: "conversation.created",
+      eventKey: `conversation:${result.id}:created`,
+      conversationId: result.id,
+      customerId: result.customerId,
+      conversation: {
+        status: result.status,
+        priority: result.priority,
+        channel: result.channel,
+        assignedToMembershipId: result.assignedToMembershipId,
+      },
+    }),
+  );
+
+  return result;
 }

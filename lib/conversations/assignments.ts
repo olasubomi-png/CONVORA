@@ -139,6 +139,18 @@ export async function assignConversation(
         tx,
       );
 
+      // automation event after tx
+      void import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
+        dispatchAutomationEvent({
+          organizationId: conversation.organizationId,
+          triggerType: "conversation.assigned",
+          eventKey: `conversation:${conversationId}:assigned:${assigneeMembershipId}:${assignment.id}`,
+          conversationId,
+          conversation: {
+            assignedToMembershipId: assigneeMembershipId,
+          },
+        }),
+      );
       return assignment;
     });
   } catch (error) {
@@ -231,4 +243,13 @@ export async function unassignConversation(
       tx,
     );
   });
+
+  void import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
+    dispatchAutomationEvent({
+      organizationId: conversation.organizationId,
+      triggerType: "conversation.unassigned",
+      eventKey: `conversation:${conversationId}:unassigned:${Date.now()}`,
+      conversationId,
+    }),
+  );
 }

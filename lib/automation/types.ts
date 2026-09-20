@@ -37,18 +37,21 @@ export type AutomationCondition = {
 };
 
 export type AutomationAction =
-  | { type: "set_conversation_status"; status: string }
-  | { type: "set_priority"; priority: string }
+  | { type: "set_conversation_status"; status: "OPEN" | "PENDING" | "CLOSED" }
+  | { type: "set_priority"; priority: "NORMAL" | "HIGH" | "URGENT" }
   | { type: "add_internal_note"; body: string }
   | { type: "assign_conversation"; membershipId: string }
-  | { type: "add_tag"; tag: string }
-  | { type: "remove_tag"; tag: string };
+  | { type: "add_tag"; tagId: string }
+  | { type: "remove_tag"; tagId: string }
+  | { type: "add_customer_tag"; tagId: string }
+  | { type: "remove_customer_tag"; tagId: string };
 
-/** Safe context exposed to condition evaluation — no code execution. */
 export type AutomationContext = {
   organizationId: string;
   conversationId?: string;
   customerId?: string;
+  /** Rule creator membership used as note author when present. */
+  actorMembershipId?: string | null;
   conversation?: {
     status?: string;
     priority?: string;
@@ -68,7 +71,6 @@ export type AutomationContext = {
     type: AutomationTriggerType;
     key: string;
   };
-  /** Automation recursion depth (0 = original external/domain event). */
   depth: number;
 };
 

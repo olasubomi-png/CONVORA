@@ -77,6 +77,7 @@ export async function emitAutomationEvent(input: {
       organizationId: input.organizationId,
       conversationId: input.context.conversationId,
       customerId: input.context.customerId,
+      actorMembershipId: rule.createdByMembershipId,
       conversation: input.context.conversation,
       customer: input.context.customer,
       message: input.context.message,

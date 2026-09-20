@@ -126,15 +126,16 @@ describe("automation engine", () => {
     );
     await createAutomationRule(owner.id, org.organizationId, {
       name: "High",
-      triggerType: "conversation.created",
+      triggerType: "conversation.message_received",
       conditions: [],
       actions: [{ type: "set_priority", priority: "HIGH" }],
     });
 
+    const eventKey = `msg:${conversation.id}:idem`;
     const r1 = await emitAutomationEvent({
       organizationId: org.organizationId,
-      triggerType: "conversation.created",
-      eventKey: `conv:${conversation.id}:created`,
+      triggerType: "conversation.message_received",
+      eventKey,
       context: {
         conversationId: conversation.id,
         conversation: { status: "OPEN", priority: "NORMAL" },
@@ -144,8 +145,8 @@ describe("automation engine", () => {
 
     const r2 = await emitAutomationEvent({
       organizationId: org.organizationId,
-      triggerType: "conversation.created",
-      eventKey: `conv:${conversation.id}:created`,
+      triggerType: "conversation.message_received",
+      eventKey,
       context: {
         conversationId: conversation.id,
         conversation: { status: "OPEN", priority: "NORMAL" },
@@ -164,7 +165,7 @@ describe("automation engine", () => {
       .select()
       .from(automationExecutions)
       .where(eq(automationExecutions.organizationId, org.organizationId));
-    expect(execs).toHaveLength(1);
+    expect(execs.filter((e) => e.triggerType === "conversation.message_received")).toHaveLength(1);
   });
 
   it("concurrent same event yields one execution", async () => {

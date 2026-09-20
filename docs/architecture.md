@@ -192,3 +192,12 @@ Domain Event → emitAutomationEvent → match enabled rules (priority ASC, id A
 - **Loop protection**: `MAX_AUTOMATION_DEPTH = 3`; deeper emissions skipped
 - **No eval / user code / external messaging**
 - **Authz**: OWNER/ADMIN manage rules; members can list
+
+
+### Automation execution semantics (Phase 10 hardened)
+
+- Actions run sequentially within one rule execution; a thrown error marks the execution FAILED.
+- Assignment actions use their own FOR UPDATE transaction (compatible with Conversation Engine locks).
+- Idempotency is enforced by unique `idempotency_key`.
+- Depth limit 3 stops recursive chains.
+- Notes are authored as the rule creator membership with an `[automation]` body prefix (never customer-facing).

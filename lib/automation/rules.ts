@@ -14,12 +14,13 @@ import {
   ValidationError,
 } from "@/lib/errors";
 import {
-  AUTOMATION_TRIGGERS,
-  CONDITION_OPERATORS,
-  type AutomationAction,
-  type AutomationCondition,
   type AutomationTriggerType,
 } from "@/lib/automation/types";
+import {
+  parseConditionsStrict,
+  parseActionsStrict,
+  parseTriggerType,
+} from "@/lib/automation/validation";
 
 async function requireAdmin(actorUserId: string, organizationId: string) {
   const membership = await getActiveMembership(actorUserId, organizationId);
@@ -31,44 +32,6 @@ async function requireAdmin(actorUserId: string, organizationId: string) {
   return membership;
 }
 
-function parseConditions(raw: unknown): AutomationCondition[] {
-  if (!Array.isArray(raw)) {
-    throw new ValidationError("conditions must be an array.");
-  }
-  return raw.map((c) => {
-    if (!c || typeof c !== "object") {
-      throw new ValidationError("Invalid condition.");
-    }
-    const cond = c as Record<string, unknown>;
-    if (typeof cond.field !== "string" || typeof cond.operator !== "string") {
-      throw new ValidationError("Condition requires field and operator.");
-    }
-    if (!(CONDITION_OPERATORS as readonly string[]).includes(cond.operator)) {
-      throw new ValidationError(`Unsupported operator: ${cond.operator}`);
-    }
-    return {
-      field: cond.field,
-      operator: cond.operator as AutomationCondition["operator"],
-      value: cond.value,
-    };
-  });
-}
-
-function parseActions(raw: unknown): AutomationAction[] {
-  if (!Array.isArray(raw)) {
-    throw new ValidationError("actions must be an array.");
-  }
-  return raw.map((a) => {
-    if (!a || typeof a !== "object") {
-      throw new ValidationError("Invalid action.");
-    }
-    const act = a as Record<string, unknown>;
-    if (typeof act.type !== "string") {
-      throw new ValidationError("Action requires type.");
-    }
-    return act as AutomationAction;
-  });
-}
 
 export async function createAutomationRule(
   actorUserId: string,
@@ -88,11 +51,9 @@ export async function createAutomationRule(
   if (!name || name.length > 120) {
     throw new ValidationError("name is required (max 120).");
   }
-  if (!(AUTOMATION_TRIGGERS as readonly string[]).includes(input.triggerType)) {
-    throw new ValidationError("Invalid trigger type.");
-  }
-  const conditions = parseConditions(input.conditions);
-  const actions = parseActions(input.actions);
+  parseTriggerType(input.triggerType);
+  const conditions = parseConditionsStrict(input.conditions);
+  const actions = parseActionsStrict(input.actions);
 
   const db = getDatabase();
   return db.transaction(async (tx) => {
@@ -277,4 +238,99 @@ export async function listExecutions(
     .where(eq(automationExecutions.organizationId, organizationId))
     .orderBy(desc(automationExecutions.startedAt))
     .limit(Math.min(limit, 100));
+}
+
+export async function updateAutomationRule(
+  actorUserId: string,
+  ruleId: string,
+  input: {
+    name?: string;
+    description?: string | null;
+    triggerType?: string;
+    priority?: number;
+    conditions?: unknown;
+    actions?: unknown;
+    enabled?: boolean;
+  },
+) {
+  const db = getDatabase();
+  const [rule] = await db
+    .select()
+    .from(automationRules)
+    .where(eq(automationRules.id, ruleId))
+    .limit(1);
+  if (!rule) throw new NotFoundError("Rule not found.");
+  await requireAdmin(actorUserId, rule.organizationId);
+
+  const patch: {
+    name?: string;
+    description?: string | null;
+    triggerType?: AutomationTriggerType;
+    priority?: number;
+    enabled?: boolean;
+    updatedAt: Date;
+  } = { updatedAt: new Date() };
+
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (!name || name.length > 120) {
+      throw new ValidationError("name is required (max 120).");
+    }
+    patch.name = name;
+  }
+  if (input.description !== undefined) {
+    patch.description = input.description?.trim() || null;
+  }
+  if (input.triggerType !== undefined) {
+    patch.triggerType = parseTriggerType(input.triggerType) as AutomationTriggerType;
+  }
+  if (input.priority !== undefined) {
+    patch.priority = input.priority;
+  }
+  if (input.enabled !== undefined) {
+    patch.enabled = input.enabled;
+  }
+
+  const conditions =
+    input.conditions !== undefined
+      ? parseConditionsStrict(input.conditions)
+      : null;
+  const actions =
+    input.actions !== undefined ? parseActionsStrict(input.actions) : null;
+
+  return db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(automationRules)
+      .set(patch)
+      .where(
+        and(
+          eq(automationRules.id, ruleId),
+          eq(automationRules.organizationId, rule.organizationId),
+        ),
+      )
+      .returning();
+
+    if (conditions !== null || actions !== null) {
+      await tx
+        .update(automationRuleDefinitions)
+        .set({
+          ...(conditions !== null ? { conditions } : {}),
+          ...(actions !== null ? { actions } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(automationRuleDefinitions.ruleId, ruleId));
+    }
+
+    await recordAuditEvent(
+      {
+        eventType: "AUTOMATION_RULE_UPDATED",
+        actorUserId,
+        organizationId: rule.organizationId,
+        payload: { ruleId },
+      },
+      tx,
+    );
+
+    return updated;
+  });
 }
