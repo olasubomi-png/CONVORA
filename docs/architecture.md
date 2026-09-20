@@ -1,62 +1,77 @@
 # CONVORA architecture
 
-Status: Phase 2 (hardened) — public identity (agent & organization profiles).
+Status: Phase 3 — conversation engine & shared inbox foundation.
 
-## Identity model
+## Layers
 
 ```
-User → Membership (role + status) → Organization
-                ↓
-         Agent profile (per membership)
-Organization → Organization profile (1:1)
+WhatsApp / Facebook / Instagram / Email / SMS / Web Chat
+                    ↓  (future adapters)
+            Channel Adapter Layer
+                    ↓
+         CONVORA Conversation Engine
+                    ↓
+              Shared Agent Inbox
 ```
 
-An agent is **not** a separate login. Agent profiles attach to memberships.
+External channel adapters are **not** implemented in Phase 3.
 
-### Who may hold an agent profile
+## Tenancy
 
-`canHoldAgentProfile(role)` is true for **OWNER**, **ADMIN**, and **AGENT**.
+Organization is always the security boundary.
 
-Rationale: organization representatives (including the founding OWNER) may maintain a public professional identity for that membership. There is no separate `isAgent` boolean — `membership.role` remains authoritative.
+User → Membership → Organization → Customers / Conversations / Tags
 
-### Multi-organization users
+## Conversation domain
 
-A user may have memberships in multiple organizations. Each membership may have its own agent profile, username, posts, and verification state.
+```
+Organization
+  ├── Customer
+  └── Conversation
+        ├── Participants (CUSTOMER | AGENT)
+        ├── Messages
+        ├── Internal notes (staff only)
+        ├── Assignments (history)
+        ├── Tags
+        └── Read state (per membership)
+```
 
-## Public identity
+### Status lifecycle
 
-| Surface | Route | Auth |
-| --- | --- | --- |
-| Agent | `/agents/[username]` (`/@username` rewrite) | Public |
-| Organization | `/org/[slug]` | Public |
-| Manage agent | `/app/profile` | Session |
-| Manage org profile | `/app/organization/profile` | Session + ADMIN/OWNER |
+- `OPEN` — active
+- `PENDING` — waiting
+- `CLOSED` — resolved; may reopen to `OPEN`
 
-### Public visibility chain (agent)
+### Priority
 
-User ACTIVE ∧ Membership ACTIVE ∧ Organization ACTIVE ∧ Profile PUBLIC ∧ verification ≠ SUSPENDED
+`NORMAL | HIGH | URGENT`
 
-Private / inactive states return **not found** (no existence leak).
+### Channel labels
 
-### Verification (administrative)
+`WEB | WHATSAPP | FACEBOOK | INSTAGRAM | EMAIL | SMS | OTHER` — source labels only.
 
-Statuses: `UNVERIFIED | PENDING | VERIFIED | SUSPENDED`.
+### Authorization (Phase 3)
 
-Allowed transitions are finite (see `lib/profiles/verification.ts`). Posts never imply verification.
+| Action | AGENT | ADMIN | OWNER |
+| --- | --- | --- | --- |
+| View org conversations | ✓ | ✓ | ✓ |
+| Send messages | ✓ | ✓ | ✓ |
+| Internal notes | ✓ | ✓ | ✓ |
+| Assign to self | ✓ | ✓ | ✓ |
+| Assign to others | | ✓ | ✓ |
+| Status / priority | ✓ | ✓ | ✓ |
+| Tags | ✓ | ✓ | ✓ |
 
-- Agent verification: ADMIN or OWNER of the organization
-- Organization verification: OWNER only (Phase 2)
+Cross-tenant access returns **NotFound**.
 
-### Posts
+### Public profile boundary
 
-Visibility: `DRAFT | PUBLIC | ARCHIVED`.
+Phase 2 public profiles do not expose conversations. Full anonymous web-chat identity and abuse protection are deferred to later phases.
 
-`publishedAt`: set on first PUBLIC; preserved on archive and re-publish.
+## Phase history
 
-## Sessions & tenancy
-
-Unchanged from Phase 1. Never trust browser-supplied org/membership IDs for authorization.
+0 Foundation · 1 Identity · 2 Public profiles · 3 Conversation engine (current)
 
 ## Out of scope
 
-Conversations, channels, inbox, AI, CRM, billing (later phases).
+Channel APIs, AI, billing, analytics, real-time websockets, file storage.

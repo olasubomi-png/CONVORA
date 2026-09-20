@@ -42,6 +42,15 @@ export async function truncateAllTables(): Promise<void> {
   const db = getTestDb();
   await db.execute(sql`
     TRUNCATE TABLE
+      conversation_read_state,
+      conversation_tag_links,
+      conversation_tags,
+      conversation_assignments,
+      conversation_notes,
+      messages,
+      conversation_participants,
+      conversations,
+      customers,
       agent_posts,
       agent_profiles,
       organization_profiles,
