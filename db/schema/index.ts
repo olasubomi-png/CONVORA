@@ -184,3 +184,19 @@ export type {
   ChannelInboundEvent,
   ChannelMessageDelivery,
 } from "./channels";
+
+export {
+  agentPresence,
+  teams,
+  teamMemberships,
+  conversationWatchers,
+  conversationAssignmentHistory,
+  agentPresenceStatusEnum,
+  teamMemberRoleEnum,
+} from "./teams";
+export type {
+  AgentPresence,
+  Team,
+  TeamMembership,
+  ConversationWatcher,
+} from "./teams";

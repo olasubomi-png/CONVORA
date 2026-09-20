@@ -16,6 +16,7 @@ export const memberships = pgTable("memberships", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex("memberships_org_user_unique").on(t.organizationId, t.userId),
+    uniqueIndex("memberships_org_id_unique").on(t.organizationId, t.id),
   uniqueIndex("memberships_one_owner_per_org").on(t.organizationId).where(sql`${t.role} = 'OWNER' AND ${t.status} <> 'REMOVED'`),
   index("memberships_user_id_idx").on(t.userId),
   index("memberships_organization_id_idx").on(t.organizationId),

@@ -1,6 +1,6 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDatabase } from "@/db";
-import { conversationAssignments, conversations } from "@/db/schema";
+import { conversationAssignments, conversations, conversationAssignmentHistory } from "@/db/schema";
 import {
   requireOrgConversation,
   requireMembershipInOrg,
@@ -75,6 +75,15 @@ export async function assignConversation(
         })
         .where(eq(conversations.id, conversationId));
 
+      await tx.insert(conversationAssignmentHistory).values({
+        organizationId: conversation.organizationId,
+        conversationId,
+        actorMembershipId: membership.id,
+        previousMembershipId: null,
+        newMembershipId: assigneeMembershipId,
+        action: "ASSIGN",
+      });
+
       await recordAuditEvent(
         {
           eventType: "CONVERSATION_ASSIGNED",
@@ -134,6 +143,7 @@ export async function unassignConversation(
         ),
       );
 
+    const previous = conversation.assignedToMembershipId;
     await tx
       .update(conversations)
       .set({
@@ -141,6 +151,15 @@ export async function unassignConversation(
         updatedAt: new Date(),
       })
       .where(eq(conversations.id, conversationId));
+
+    await tx.insert(conversationAssignmentHistory).values({
+      organizationId: conversation.organizationId,
+      conversationId,
+      actorMembershipId: membership.id,
+      previousMembershipId: previous,
+      newMembershipId: null,
+      action: "UNASSIGN",
+    });
 
     await recordAuditEvent(
       {

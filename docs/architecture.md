@@ -169,3 +169,13 @@ verify / parse / send
 
 WhatsApp `phone_number_id` is stored as `provider_resource_id` (unique per provider)
 for O(1) webhook routing.
+
+
+## Team Operations (Phase 9)
+
+- **Presence**: ONLINE | AWAY | OFFLINE per membership; heartbeat only refreshes ONLINE lastSeenAt
+- **Teams**: org-scoped; memberships reference organization memberships (MEMBER | LEAD)
+- **Assignment**: existing FOR UPDATE + partial unique active assignment; history table append-only
+- **Watchers**: many per conversation; not assignees
+- **Workload**: aggregate queries (unassigned, per-agent active counts)
+- TEAM LEAD is not ADMIN; team admin actions remain OWNER/ADMIN only in Phase 9
