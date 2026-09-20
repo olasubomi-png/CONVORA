@@ -100,3 +100,11 @@ Customers belong to an **organization**, not an agent.
 - Merge (OWNER/ADMIN): reassigns conversations/notes/tags/attributes; retires source record
 
 Identity is not global: the same person may exist in multiple organizations as separate customer rows.
+
+### Customer lifecycle
+
+- `ACTIVE` — appears in lists and accepts updates
+- `MERGED` — retired; `mergedIntoCustomerId` points at canonical; excluded from default lists
+- Merge locks both rows (`FOR UPDATE`, deterministic ID order); rejects already-merged sources
+- Attribute BOOLEAN accepts only true/false (and string forms); SELECT validated against options
+- Activity timeline filters event types in SQL before pagination

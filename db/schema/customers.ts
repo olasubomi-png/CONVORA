@@ -1,5 +1,6 @@
 import {
   jsonb,
+  pgEnum,
   pgTable,
   text,
   timestamp,
@@ -10,10 +11,15 @@ import {
 import { sql } from "drizzle-orm";
 import { organizations } from "./organizations";
 
+export const customerStatusEnum = pgEnum("customer_status", [
+  "ACTIVE",
+  "MERGED",
+]);
+
 /**
  * Organization-scoped external contact.
- * Identity uniqueness is per organization (email/phone), not global.
- * The same person may exist in multiple organizations as separate records.
+ * Email uniqueness is per organization for ACTIVE customers with non-null email.
+ * MERGED customers are retired and excluded from normal lists.
  */
 export const customers = pgTable(
   "customers",
@@ -29,8 +35,10 @@ export const customers = pgTable(
     companyName: text("company_name"),
     jobTitle: text("job_title"),
     location: text("location"),
-    /** Soft internal summary — detailed notes live in customer_notes. */
     internalSummary: text("internal_summary"),
+    status: customerStatusEnum("status").notNull().default("ACTIVE"),
+    /** When status=MERGED, points at the canonical surviving customer. */
+    mergedIntoCustomerId: uuid("merged_into_customer_id"),
     metadata: jsonb("metadata")
       .$type<Record<string, unknown>>()
       .notNull()
@@ -49,12 +57,13 @@ export const customers = pgTable(
     index("customers_org_name_idx").on(t.organizationId, t.displayName),
     index("customers_org_company_idx").on(t.organizationId, t.companyName),
     index("customers_org_created_idx").on(t.organizationId, t.createdAt),
-    // Soft uniqueness: one non-null email per org
+    index("customers_org_status_idx").on(t.organizationId, t.status),
     uniqueIndex("customers_org_email_unique")
       .on(t.organizationId, t.email)
-      .where(sql`${t.email} IS NOT NULL`),
+      .where(sql`${t.email} IS NOT NULL AND ${t.status} = 'ACTIVE'`),
   ],
 );
 
 export type Customer = typeof customers.$inferSelect;
 export type NewCustomer = typeof customers.$inferInsert;
+export type CustomerStatus = (typeof customerStatusEnum.enumValues)[number];

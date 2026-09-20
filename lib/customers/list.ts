@@ -29,10 +29,14 @@ export async function listCustomers(
 
   const limit = Math.min(Math.max(1, options?.limit ?? PAGE_SIZE), MAX_PAGE);
   const db = getDatabase();
-  const conditions = [eq(customers.organizationId, organizationId)];
+  const conditions = [
+    eq(customers.organizationId, organizationId),
+    eq(customers.status, "ACTIVE"),
+  ];
 
   if (options?.q?.trim()) {
-    const term = `%${options.q.trim().toLowerCase()}%`;
+    const qRaw = options.q.trim().slice(0, 100);
+    const term = `%${qRaw.toLowerCase()}%`;
     conditions.push(
       or(
         sql`lower(${customers.displayName}) like ${term}`,

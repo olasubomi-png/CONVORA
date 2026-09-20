@@ -32,6 +32,10 @@ export async function updateCustomer(
     actorUserId,
     customerId,
   );
+  if (customer.status !== "ACTIVE") {
+    const { ValidationError } = await import("@/lib/errors");
+    throw new ValidationError("Cannot update a merged customer.");
+  }
 
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   if (input.displayName !== undefined) {

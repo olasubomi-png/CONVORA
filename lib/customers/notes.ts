@@ -56,5 +56,6 @@ export async function listCustomerNotes(
     .select()
     .from(customerNotes)
     .where(eq(customerNotes.customerId, customerId))
-    .orderBy(asc(customerNotes.createdAt));
+    .orderBy(asc(customerNotes.createdAt))
+    .limit(100);
 }

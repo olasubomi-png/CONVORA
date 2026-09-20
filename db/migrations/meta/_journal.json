@@ -36,6 +36,13 @@
       "when": 1789895579154,
       "tag": "0004_third_champions",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789896029067,
+      "tag": "0005_brief_morph",
+      "breakpoints": true
     }
   ]
 }

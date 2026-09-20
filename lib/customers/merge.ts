@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDatabase } from "@/db";
 import {
   customers,
@@ -17,9 +17,12 @@ import {
 } from "@/lib/errors";
 
 /**
- * Merge source customer into canonical target within the same organization.
- * Reassigns conversations, notes, tags, attributes; does not delete history.
- * OWNER/ADMIN only.
+ * Merge source into canonical within the same organization.
+ *
+ * - Locks both rows with FOR UPDATE in deterministic ID order (deadlock-safe)
+ * - Rejects MERGED sources/targets and cycles
+ * - Reassigns conversations/notes; tags/attributes canonical-wins
+ * - Soft-retires source with status=MERGED and mergedIntoCustomerId
  */
 export async function mergeCustomers(
   actorUserId: string,
@@ -30,7 +33,7 @@ export async function mergeCustomers(
     throw new ValidationError("Cannot merge a customer into itself.");
   }
 
-  const { customer: target, membership } = await requireOrgCustomer(
+  const { customer: targetAuth, membership } = await requireOrgCustomer(
     actorUserId,
     canonicalCustomerId,
   );
@@ -40,17 +43,67 @@ export async function mergeCustomers(
     );
   }
 
-  const { customer: source } = await requireOrgCustomer(
+  // Pre-check source is same-org (also NotFound if cross-tenant)
+  const { customer: sourceAuth } = await requireOrgCustomer(
     actorUserId,
     sourceCustomerId,
   );
-
-  if (source.organizationId !== target.organizationId) {
+  if (sourceAuth.organizationId !== targetAuth.organizationId) {
     throw new ConflictError("Customers must belong to the same organization.");
   }
 
+  // Deterministic lock order by UUID string comparison
+  const firstId =
+    canonicalCustomerId < sourceCustomerId
+      ? canonicalCustomerId
+      : sourceCustomerId;
+  const secondId =
+    firstId === canonicalCustomerId ? sourceCustomerId : canonicalCustomerId;
+
   const db = getDatabase();
   return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT id FROM customers WHERE id = ${firstId} FOR UPDATE`,
+    );
+    await tx.execute(
+      sql`SELECT id FROM customers WHERE id = ${secondId} FOR UPDATE`,
+    );
+
+    const [targetRows, sourceRows] = await Promise.all([
+      tx
+        .select()
+        .from(customers)
+        .where(eq(customers.id, canonicalCustomerId))
+        .limit(1),
+      tx
+        .select()
+        .from(customers)
+        .where(eq(customers.id, sourceCustomerId))
+        .limit(1),
+    ]);
+
+    const target = targetRows[0];
+    const source = sourceRows[0];
+    if (!target || !source) {
+      throw new ConflictError("Customer no longer available for merge.");
+    }
+    if (target.organizationId !== source.organizationId) {
+      throw new ConflictError("Customers must belong to the same organization.");
+    }
+    if (target.status !== "ACTIVE") {
+      throw new ConflictError("Canonical customer is not active.");
+    }
+    if (source.status !== "ACTIVE") {
+      throw new ConflictError("Source customer has already been merged.");
+    }
+    if (source.mergedIntoCustomerId) {
+      throw new ConflictError("Source customer has already been merged.");
+    }
+    // Prevent cycles: canonical must not already point at source
+    if (target.mergedIntoCustomerId === sourceCustomerId) {
+      throw new ConflictError("Invalid merge cycle.");
+    }
+
     await tx
       .update(conversations)
       .set({ customerId: canonicalCustomerId, updatedAt: new Date() })
@@ -61,7 +114,6 @@ export async function mergeCustomers(
       .set({ customerId: canonicalCustomerId })
       .where(eq(customerNotes.customerId, sourceCustomerId));
 
-    // Move tags (ignore conflicts on already-present tags)
     const sourceTags = await tx
       .select()
       .from(customerTagLinks)
@@ -69,17 +121,14 @@ export async function mergeCustomers(
     for (const link of sourceTags) {
       await tx
         .insert(customerTagLinks)
-        .values({
-          customerId: canonicalCustomerId,
-          tagId: link.tagId,
-        })
+        .values({ customerId: canonicalCustomerId, tagId: link.tagId })
         .onConflictDoNothing();
     }
     await tx
       .delete(customerTagLinks)
       .where(eq(customerTagLinks.customerId, sourceCustomerId));
 
-    // Attribute values: prefer canonical; drop source on conflict
+    // Attributes: canonical wins — source only fills gaps
     const sourceAttrs = await tx
       .select()
       .from(customerAttributeValues)
@@ -101,14 +150,15 @@ export async function mergeCustomers(
       .delete(customerAttributeValues)
       .where(eq(customerAttributeValues.customerId, sourceCustomerId));
 
-    // Soft-retire source: rename to avoid email unique conflict
     await tx
       .update(customers)
       .set({
+        status: "MERGED",
+        mergedIntoCustomerId: canonicalCustomerId,
         email: null,
         phone: null,
-        displayName: `[Merged] ${source.displayName}`,
-        internalSummary: `Merged into ${canonicalCustomerId}`,
+        displayName: source.displayName,
+        internalSummary: `Merged into customer ${canonicalCustomerId}`,
         updatedAt: new Date(),
       })
       .where(eq(customers.id, sourceCustomerId));

@@ -47,3 +47,12 @@ In-memory rate limiter; no email verification; no password reset; invite accepta
 - Read-state message IDs cannot reference another conversation.
 - Internal notes are never returned from message list APIs.
 - Audit writes can share the domain transaction so rollbacks remove audit rows too.
+
+
+## Customer merge & attributes (Phase 4 hardening)
+
+- Concurrent merges serialize via `SELECT … FOR UPDATE` with sorted lock order.
+- MERGED customers excluded from default list; cannot be updated or re-merged as source.
+- Tag and attribute operations require same-organization definitions.
+- BOOLEAN attributes reject non-boolean coercion.
+- Activity payloads expose only approved meta fields.

@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDatabase } from "@/db";
 import { auditEvents } from "@/db/schema";
 import { requireOrgCustomer } from "@/lib/customers/access";
@@ -6,7 +6,6 @@ import {
   decodeTimeIdCursor,
   encodeTimeIdCursor,
 } from "@/lib/conversations/cursors";
-import { ValidationError } from "@/lib/errors";
 
 const CUSTOMER_EVENTS = [
   "CUSTOMER_CREATED",
@@ -23,7 +22,8 @@ const CUSTOMER_EVENTS = [
 ] as const;
 
 /**
- * Timeline derived from audit events scoped to organization + customerId in payload.
+ * Timeline from audit events: filter event types in SQL before LIMIT.
+ * Ordering: createdAt DESC, id DESC.
  */
 export async function listCustomerActivity(
   actorUserId: string,
@@ -36,6 +36,7 @@ export async function listCustomerActivity(
 
   const conditions = [
     eq(auditEvents.organizationId, customer.organizationId),
+    inArray(auditEvents.eventType, [...CUSTOMER_EVENTS]),
     sql`${auditEvents.payload}->>'customerId' = ${customerId}`,
   ];
 
@@ -66,29 +67,26 @@ export async function listCustomerActivity(
     .limit(limit);
 
   return {
-    events: rows
-      .filter((r) =>
-        (CUSTOMER_EVENTS as readonly string[]).includes(r.eventType),
-      )
-      .map((r) => ({
-        id: r.id,
-        type: r.eventType,
-        createdAt: r.createdAt,
-        // Safe subset only
-        meta: {
-          conversationId:
-            typeof r.payload?.conversationId === "string"
-              ? r.payload.conversationId
-              : undefined,
-          noteId:
-            typeof r.payload?.noteId === "string" ? r.payload.noteId : undefined,
-          tagId:
-            typeof r.payload?.tagId === "string" ? r.payload.tagId : undefined,
-          fields: Array.isArray(r.payload?.fields)
-            ? r.payload.fields
+    events: rows.map((r) => ({
+      id: r.id,
+      type: r.eventType,
+      createdAt: r.createdAt,
+      meta: {
+        conversationId:
+          typeof r.payload?.conversationId === "string"
+            ? r.payload.conversationId
             : undefined,
-        },
-      })),
+        noteId:
+          typeof r.payload?.noteId === "string" ? r.payload.noteId : undefined,
+        tagId:
+          typeof r.payload?.tagId === "string" ? r.payload.tagId : undefined,
+        fields: Array.isArray(r.payload?.fields) ? r.payload.fields : undefined,
+        sourceCustomerId:
+          typeof r.payload?.sourceCustomerId === "string"
+            ? r.payload.sourceCustomerId
+            : undefined,
+      },
+    })),
     nextCursor:
       rows.length === limit && rows[rows.length - 1]
         ? encodeTimeIdCursor(
@@ -98,5 +96,3 @@ export async function listCustomerActivity(
         : null,
   };
 }
-
-export { ValidationError };
