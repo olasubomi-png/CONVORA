@@ -41,6 +41,10 @@ export const RESERVED_AGENT_USERNAMES = new Set([
   "terms",
   "profile",
   "profiles",
+  "sitemap",
+  "robots",
+  "favicon",
+  "middleware",
 ]);
 
 const USERNAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

@@ -29,3 +29,12 @@ In-memory rate limiter; no email verification; no password reset; invite accepta
 - Visibility is enforced in query layer, not only UI.
 - Suspended users, memberships, organizations, and verification-suspended profiles are hidden.
 - Profile updates resolve membership from the session; clients cannot choose arbitrary membership IDs for write authorization.
+
+
+## Phase 2 profile security
+
+- `canHoldAgentProfile`: OWNER | ADMIN | AGENT (explicit; no isAgent flag).
+- Public DTOs select explicit fields only — never password hashes, session data, membership IDs, or org UUIDs.
+- Cross-tenant post/profile writes return NotFound (non-disclosure).
+- Organization profile: ADMIN/OWNER; organization verification: OWNER only.
+- Post visibility transitions validated; publishedAt preserved across archive/re-publish.

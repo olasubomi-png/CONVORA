@@ -1,6 +1,6 @@
 # CONVORA architecture
 
-Status: Phase 2 — public identity (agent & organization profiles).
+Status: Phase 2 (hardened) — public identity (agent & organization profiles).
 
 ## Identity model
 
@@ -11,37 +11,52 @@ User → Membership (role + status) → Organization
 Organization → Organization profile (1:1)
 ```
 
-An agent is **not** a separate login. It is a user with an organization membership and an optional `agent_profiles` row bound to that membership (supports multi-org users).
+An agent is **not** a separate login. Agent profiles attach to memberships.
+
+### Who may hold an agent profile
+
+`canHoldAgentProfile(role)` is true for **OWNER**, **ADMIN**, and **AGENT**.
+
+Rationale: organization representatives (including the founding OWNER) may maintain a public professional identity for that membership. There is no separate `isAgent` boolean — `membership.role` remains authoritative.
+
+### Multi-organization users
+
+A user may have memberships in multiple organizations. Each membership may have its own agent profile, username, posts, and verification state.
 
 ## Public identity
 
 | Surface | Route | Auth |
 | --- | --- | --- |
-| Agent | `/agents/[username]` (also `/@username` via rewrite) | Public |
+| Agent | `/agents/[username]` (`/@username` rewrite) | Public |
 | Organization | `/org/[slug]` | Public |
 | Manage agent | `/app/profile` | Session |
-| Manage org | `/app/organization/profile` | Session + ADMIN/OWNER |
+| Manage org profile | `/app/organization/profile` | Session + ADMIN/OWNER |
 
-Public visibility requires the full active chain:
+### Public visibility chain (agent)
 
-User ACTIVE · Membership ACTIVE · Organization ACTIVE · Profile PUBLIC · verification ≠ SUSPENDED
+User ACTIVE ∧ Membership ACTIVE ∧ Organization ACTIVE ∧ Profile PUBLIC ∧ verification ≠ SUSPENDED
 
-Private profiles return not-found (no existence leak).
+Private / inactive states return **not found** (no existence leak).
 
-## Verification
+### Verification (administrative)
 
 Statuses: `UNVERIFIED | PENDING | VERIFIED | SUSPENDED`.
 
-Posts do **not** imply verification. Verification is administrative (OWNER/ADMIN for agents; OWNER for org verification in Phase 2).
+Allowed transitions are finite (see `lib/profiles/verification.ts`). Posts never imply verification.
 
-## Activity
+- Agent verification: ADMIN or OWNER of the organization
+- Organization verification: OWNER only (Phase 2)
 
-`agent_posts` support professional activity (`DRAFT | PUBLIC | ARCHIVED`). Not a social network — no likes, comments, or feeds.
+### Posts
+
+Visibility: `DRAFT | PUBLIC | ARCHIVED`.
+
+`publishedAt`: set on first PUBLIC; preserved on archive and re-publish.
 
 ## Sessions & tenancy
 
-Unchanged from Phase 1: opaque sessions, membership-scoped authorization, never trust browser-supplied org/membership IDs for authorization.
+Unchanged from Phase 1. Never trust browser-supplied org/membership IDs for authorization.
 
-## Out of scope (later phases)
+## Out of scope
 
-Conversations, channels (WhatsApp/Facebook/…), inbox, AI, CRM, billing.
+Conversations, channels, inbox, AI, CRM, billing (later phases).

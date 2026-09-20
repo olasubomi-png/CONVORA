@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { getDatabase } from "@/db";
 import {
   agentPosts,
@@ -180,10 +180,11 @@ export async function getPublicOrganizationProfileBySlug(
         eq(memberships.status, "ACTIVE"),
         eq(users.status, "ACTIVE"),
         eq(agentProfiles.visibility, "PUBLIC"),
+        ne(agentProfiles.verificationStatus, "SUSPENDED"),
       ),
     );
 
-  const agents = agentRows.filter((a) => a.verificationStatus !== "SUSPENDED");
+  const agents = agentRows;
 
   return {
     slug: org.slug,

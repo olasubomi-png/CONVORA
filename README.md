@@ -55,3 +55,8 @@ Argon2id, hashed session tokens, HTTP-only cookies, membership-based authz, tena
 - Phase 1 — Identity & tenancy (current)
 - Phase 2 — Agent/organization profiles & verification foundations
 - Later — Conversations, channel adapters, inbox
+
+
+## Phase 2 notes
+
+Agent profiles attach to memberships (OWNER, ADMIN, or AGENT). Public routes: `/agents/[username]`, `/org/[slug]`. Verification is administrative and independent of posts.

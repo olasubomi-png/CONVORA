@@ -3,6 +3,10 @@ import { getDatabase } from "@/db";
 import { organizationProfiles, organizations, type VerificationStatus } from "@/db/schema";
 import { recordAuditEvent } from "@/lib/audit";
 import { AuthorizationError, NotFoundError } from "@/lib/errors";
+import {
+  assertValidVerificationTransition,
+  verificationAuditEventType,
+} from "@/lib/profiles/verification";
 import { getActiveMembership } from "@/lib/authz/membership";
 import { isAdminRole } from "@/lib/authz/roles";
 import type { OrganizationProfileInput } from "@/lib/profiles/types";
@@ -109,21 +113,16 @@ export async function setOrganizationVerification(
     throw new NotFoundError("Organization profile not found.");
   }
 
+  assertValidVerificationTransition(existing[0].verificationStatus, status);
+
   const [updated] = await db
     .update(organizationProfiles)
     .set({ verificationStatus: status, updatedAt: new Date() })
     .where(eq(organizationProfiles.id, existing[0].id))
     .returning();
 
-  const eventType =
-    status === "VERIFIED"
-      ? "ORGANIZATION_VERIFIED"
-      : status === "SUSPENDED"
-        ? "ORGANIZATION_VERIFICATION_SUSPENDED"
-        : "ORGANIZATION_PROFILE_UPDATED";
-
   await recordAuditEvent({
-    eventType,
+    eventType: verificationAuditEventType(status, "organization"),
     actorUserId: actorUserId,
     organizationId,
     payload: { status },

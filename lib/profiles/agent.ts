@@ -13,12 +13,15 @@ import {
   AuthorizationError,
   ConflictError,
   NotFoundError,
-  ValidationError,
 } from "@/lib/errors";
-import { roleAtLeast, isAdminRole } from "@/lib/authz/roles";
+import { canHoldAgentProfile, isAdminRole } from "@/lib/authz/roles";
 import { getActiveMembership } from "@/lib/authz/membership";
 import type { AgentProfileInput } from "@/lib/profiles/types";
 import { normalizeUsername } from "@/lib/profiles/username";
+import {
+  assertValidVerificationTransition,
+  verificationAuditEventType,
+} from "@/lib/profiles/verification";
 
 function emptyToNull(value: string | null | undefined): string | null {
   if (value === undefined || value === null || value === "") return null;
@@ -26,8 +29,8 @@ function emptyToNull(value: string | null | undefined): string | null {
 }
 
 /**
- * Resolve the membership that owns an agent profile for the given user.
- * Prefer explicit membershipId only when it belongs to the authenticated user.
+ * Resolve an active membership that may hold an agent profile.
+ * Requires canHoldAgentProfile(role) — OWNER, ADMIN, or AGENT.
  */
 export async function resolveWritableMembership(
   userId: string,
@@ -39,7 +42,14 @@ export async function resolveWritableMembership(
 }> {
   const membership = await getActiveMembership(userId, organizationId);
   if (!membership) {
-    throw new AuthorizationError("You are not an active member of this organization.");
+    throw new AuthorizationError(
+      "You are not an active member of this organization.",
+    );
+  }
+  if (!canHoldAgentProfile(membership.role)) {
+    throw new AuthorizationError(
+      "Your membership role cannot hold an agent profile.",
+    );
   }
   return {
     membershipId: membership.id,
@@ -157,6 +167,13 @@ export async function adminUpdateAgentProfile(
     throw new NotFoundError("Agent profile not found.");
   }
 
+  if (input.verificationStatus !== undefined) {
+    assertValidVerificationTransition(
+      row.profile.verificationStatus,
+      input.verificationStatus,
+    );
+  }
+
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   if (input.displayName !== undefined) patch.displayName = input.displayName;
   if (input.publicUsername !== undefined) {
@@ -188,16 +205,11 @@ export async function adminUpdateAgentProfile(
     if (!updated) throw new NotFoundError("Agent profile not found.");
 
     if (input.verificationStatus) {
-      const eventType =
-        input.verificationStatus === "VERIFIED"
-          ? "AGENT_VERIFIED"
-          : input.verificationStatus === "SUSPENDED"
-            ? "AGENT_VERIFICATION_SUSPENDED"
-            : input.verificationStatus === "PENDING"
-              ? "AGENT_VERIFICATION_REQUESTED"
-              : "AGENT_PROFILE_UPDATED";
       await recordAuditEvent({
-        eventType,
+        eventType: verificationAuditEventType(
+          input.verificationStatus,
+          "agent",
+        ),
         actorUserId: actorUserId,
         organizationId,
         payload: {
@@ -253,37 +265,3 @@ export async function listAgentProfilesForOrganization(organizationId: string) {
       ),
     );
 }
-
-/** Can the actor edit this profile? Own membership or admin in same org. */
-export async function assertCanEditAgentProfile(
-  actorUserId: string,
-  profileId: string,
-): Promise<{ organizationId: string; isOwner: boolean }> {
-  const db = getDatabase();
-  const rows = await db
-    .select({
-      profileId: agentProfiles.id,
-      membershipUserId: memberships.userId,
-      organizationId: memberships.organizationId,
-      membershipStatus: memberships.status,
-    })
-    .from(agentProfiles)
-    .innerJoin(memberships, eq(agentProfiles.membershipId, memberships.id))
-    .where(eq(agentProfiles.id, profileId))
-    .limit(1);
-
-  const row = rows[0];
-  if (!row) throw new NotFoundError("Agent profile not found.");
-
-  if (row.membershipUserId === actorUserId && row.membershipStatus === "ACTIVE") {
-    return { organizationId: row.organizationId, isOwner: true };
-  }
-
-  const actor = await getActiveMembership(actorUserId, row.organizationId);
-  if (!actor || !isAdminRole(actor.role)) {
-    throw new AuthorizationError("You cannot edit this agent profile.");
-  }
-  return { organizationId: row.organizationId, isOwner: false };
-}
-
-export { roleAtLeast, ValidationError };
