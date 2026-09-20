@@ -56,3 +56,13 @@ In-memory rate limiter; no email verification; no password reset; invite accepta
 - Tag and attribute operations require same-organization definitions.
 - BOOLEAN attributes reject non-boolean coercion.
 - Activity payloads expose only approved meta fields.
+
+
+## Phase 5 AI security
+
+- All AI ops authorize via conversation/customer org membership (NotFound on cross-tenant)
+- OPENAI_API_KEY never exposed to clients
+- Prompts separate system instructions from untrusted transcript/profile data
+- AI output validated with Zod before use
+- Audit events record generation ids/types without full conversation bodies
+- Missing AI config → ConfigurationError (503), does not break non-AI features

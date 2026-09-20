@@ -16,6 +16,10 @@ const serverEnvSchema = z.object({
     .url("APP_URL must be a valid URL")
     .refine((value) => !value.endsWith("/"), "APP_URL must not end with a slash"),
   NODE_ENV: nodeEnvSchema.default("development"),
+  /** Optional. When unset, AI features return a configuration error. */
+  AI_PROVIDER: z.enum(["openai", "mock"]).optional(),
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  OPENAI_MODEL: z.string().min(1).default("gpt-4o-mini"),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -24,10 +28,6 @@ export type EnvParseResult =
   | { success: true; data: ServerEnv }
   | { success: false; error: z.ZodError };
 
-/**
- * Parse server environment from an arbitrary record.
- * Safe to call from tests without reading process.env.
- */
 export function parseServerEnv(
   source: Record<string, string | undefined>,
 ): EnvParseResult {
@@ -35,6 +35,9 @@ export function parseServerEnv(
     DATABASE_URL: source.DATABASE_URL,
     APP_URL: source.APP_URL,
     NODE_ENV: source.NODE_ENV,
+    AI_PROVIDER: source.AI_PROVIDER,
+    OPENAI_API_KEY: source.OPENAI_API_KEY,
+    OPENAI_MODEL: source.OPENAI_MODEL,
   });
 
   if (!result.success) {
@@ -52,10 +55,6 @@ export function formatEnvIssues(error: z.ZodError): string {
 
 let cachedEnv: ServerEnv | undefined;
 
-/**
- * Validated server-only environment.
- * Do not import this module from Client Components.
- */
 export function getServerEnv(): ServerEnv {
   if (cachedEnv) {
     return cachedEnv;
@@ -65,10 +64,15 @@ export function getServerEnv(): ServerEnv {
     DATABASE_URL: process.env.DATABASE_URL,
     APP_URL: process.env.APP_URL,
     NODE_ENV: process.env.NODE_ENV,
+    AI_PROVIDER: process.env.AI_PROVIDER,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    OPENAI_MODEL: process.env.OPENAI_MODEL,
   });
 
   if (!parsed.success) {
-    throw new Error(`Invalid environment configuration: ${formatEnvIssues(parsed.error)}`);
+    throw new Error(
+      `Invalid environment configuration: ${formatEnvIssues(parsed.error)}`,
+    );
   }
 
   cachedEnv = parsed.data;

@@ -19,6 +19,13 @@ import {
   agentPostVisibilityEnum,
 } from "./agent-posts";
 import { customers, customerStatusEnum } from "./customers";
+import {
+  aiGenerations,
+  aiSuggestions,
+  aiGenerationTypeEnum,
+  aiGenerationStatusEnum,
+  aiSuggestionStatusEnum,
+} from "./ai";
 import { customerNotes } from "./customer-notes";
 import { customerTagLinks } from "./customer-tags";
 import {
@@ -66,6 +73,11 @@ export {
   agentPostVisibilityEnum,
   customers,
   customerStatusEnum,
+  aiGenerations,
+  aiSuggestions,
+  aiGenerationTypeEnum,
+  aiGenerationStatusEnum,
+  aiSuggestionStatusEnum,
   customerNotes,
   customerTagLinks,
   customerAttributeDefinitions,
@@ -98,6 +110,11 @@ export const schema = {
   agentPosts,
   customers,
   customerStatusEnum,
+  aiGenerations,
+  aiSuggestions,
+  aiGenerationTypeEnum,
+  aiGenerationStatusEnum,
+  aiSuggestionStatusEnum,
   customerNotes,
   customerTagLinks,
   customerAttributeDefinitions,
@@ -154,6 +171,13 @@ export type {
   AgentPostVisibility,
 } from "./agent-posts";
 export type { Customer, NewCustomer, CustomerStatus } from "./customers";
+export type {
+  AiGeneration,
+  AiSuggestion,
+  AiGenerationType,
+  AiGenerationStatus,
+  AiSuggestionStatus,
+} from "./ai";
 export type { CustomerNote, NewCustomerNote } from "./customer-notes";
 export type { CustomerTagLink } from "./customer-tags";
 export type {

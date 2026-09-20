@@ -25,6 +25,7 @@ export function getTestDatabaseUrl(): string {
 
 export function setupTestEnv(): void {
   process.env.DATABASE_URL = TEST_DATABASE_URL;
+  process.env.AI_PROVIDER = "mock";
   process.env.APP_URL = process.env.APP_URL ?? "http://localhost:3000";
   if (!envReady) {
     resetServerEnvCache();
@@ -42,6 +43,8 @@ export async function truncateAllTables(): Promise<void> {
   const db = getTestDb();
   await db.execute(sql`
     TRUNCATE TABLE
+      ai_suggestions,
+      ai_generations,
       customer_attribute_values,
       customer_attribute_definitions,
       customer_tag_links,

@@ -2,7 +2,7 @@
 
 The communication layer between organizations and the people they serve.
 
-**Current status: Phase 4 — customer intelligence.**
+**Current status: Phase 5 — AI agent copilot foundation.**
 
 ## Overview
 

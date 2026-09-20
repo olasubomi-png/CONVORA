@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { AiCopilotPanel } from "@/components/ai/copilot-panel";
 
 type ConversationRow = {
   id: string;
@@ -336,6 +337,11 @@ export function InboxShell({
           </>
         )}
       </section>
+      {selected ? (
+        <div className="mt-6 lg:col-span-2">
+          <AiCopilotPanel conversationId={selected} />
+        </div>
+      ) : null}
     </div>
   );
 }

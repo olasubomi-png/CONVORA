@@ -50,6 +50,13 @@
       "when": 1789898472397,
       "tag": "0006_previous_phalanx",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789900562408,
+      "tag": "0007_long_loners",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ export type AppErrorCode =
   | "NOT_FOUND"
   | "CONFLICT"
   | "RATE_LIMIT"
+  | "CONFIGURATION_ERROR"
   | "INTERNAL_ERROR";
 
 export type AppErrorOptions = {
@@ -119,6 +120,14 @@ export function toPublicError(error: unknown): {
       },
     },
   };
+}
+
+
+export class ConfigurationError extends AppError {
+  constructor(message = "A required configuration is missing.", options?: AppErrorOptions) {
+    super("CONFIGURATION_ERROR", message, 503, true, options);
+    this.name = "ConfigurationError";
+  }
 }
 
 export function isAppError(error: unknown): error is AppError {
