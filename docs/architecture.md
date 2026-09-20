@@ -116,3 +116,16 @@ Identity is not global: the same person may exist in multiple organizations as s
 - `customer_tag_links.organization_id` + composite FKs to customer and tag
 - `customer_attribute_values.organization_id` + composite FKs to customer and definition
 - Email policy: trim + lowercase; unique among ACTIVE non-null emails per org
+
+
+## Web Chat channel (Phase 6)
+
+Embeddable visitor chat that feeds the existing Conversation Engine (`channel = WEB`).
+
+Customer site → `widget.js` → public Web Chat APIs → Conversation Engine → Shared Inbox → optional AI
+
+- **Installation**: org-scoped, public key identifier (not a secret), allowed origins, branding config
+- **Visitor session**: server-issued token (SHA-256 stored); maps to customer + conversation
+- **Realtime**: visitor→server HTTP; server→visitor polling/SSE-style refresh (3s poll in widget)
+- **Widget isolation**: root container + scoped CSS; message text HTML-escaped
+- AI remains human-approved only

@@ -19,13 +19,6 @@ import {
   agentPostVisibilityEnum,
 } from "./agent-posts";
 import { customers, customerStatusEnum } from "./customers";
-import {
-  aiGenerations,
-  aiSuggestions,
-  aiGenerationTypeEnum,
-  aiGenerationStatusEnum,
-  aiSuggestionStatusEnum,
-} from "./ai";
 import { customerNotes } from "./customer-notes";
 import { customerTagLinks } from "./customer-tags";
 import {
@@ -33,7 +26,6 @@ import {
   customerAttributeValues,
   customerAttributeTypeEnum,
 } from "./customer-attributes";
-
 import {
   conversations,
   conversationStatusEnum,
@@ -51,8 +43,23 @@ import {
 } from "./messages";
 import { conversationNotes } from "./conversation-notes";
 import { conversationAssignments } from "./conversation-assignments";
-import { conversationTags, conversationTagLinks } from "./conversation-tags";
+import {
+  conversationTags,
+  conversationTagLinks,
+} from "./conversation-tags";
 import { conversationReadState } from "./conversation-read-state";
+import {
+  aiGenerations,
+  aiSuggestions,
+  aiGenerationTypeEnum,
+  aiGenerationStatusEnum,
+  aiSuggestionStatusEnum,
+} from "./ai";
+import {
+  webChatInstallations,
+  webChatVisitors,
+  webChatInstallationStatusEnum,
+} from "./web-chat";
 
 export {
   users,
@@ -73,11 +80,6 @@ export {
   agentPostVisibilityEnum,
   customers,
   customerStatusEnum,
-  aiGenerations,
-  aiSuggestions,
-  aiGenerationTypeEnum,
-  aiGenerationStatusEnum,
-  aiSuggestionStatusEnum,
   customerNotes,
   customerTagLinks,
   customerAttributeDefinitions,
@@ -97,55 +99,21 @@ export {
   conversationTags,
   conversationTagLinks,
   conversationReadState,
-};
-
-export const schema = {
-  users,
-  organizations,
-  memberships,
-  sessions,
-  auditEvents,
-  agentProfiles,
-  organizationProfiles,
-  agentPosts,
-  customers,
-  customerStatusEnum,
   aiGenerations,
   aiSuggestions,
   aiGenerationTypeEnum,
   aiGenerationStatusEnum,
   aiSuggestionStatusEnum,
-  customerNotes,
-  customerTagLinks,
-  customerAttributeDefinitions,
-  customerAttributeValues,
-  customerAttributeTypeEnum,
-  conversations,
-  conversationParticipants,
-  messages,
-  conversationNotes,
-  conversationAssignments,
-  conversationTags,
-  conversationTagLinks,
-  conversationReadState,
-  userStatusEnum,
-  organizationStatusEnum,
-  membershipRoleEnum,
-  membershipStatusEnum,
-  verificationStatusEnum,
-  profileVisibilityEnum,
-  agentPostTypeEnum,
-  agentPostVisibilityEnum,
-  conversationStatusEnum,
-  conversationPriorityEnum,
-  conversationChannelEnum,
-  participantRoleEnum,
-  messageSenderTypeEnum,
-  messageTypeEnum,
+  webChatInstallations,
+  webChatVisitors,
+  webChatInstallationStatusEnum,
 };
 
 export type { User, NewUser } from "./users";
-export type { Organization, NewOrganization } from "./organizations";
+export type {
+  Organization,
+  NewOrganization,
+} from "./organizations";
 export type {
   Membership,
   NewMembership,
@@ -171,13 +139,6 @@ export type {
   AgentPostVisibility,
 } from "./agent-posts";
 export type { Customer, NewCustomer, CustomerStatus } from "./customers";
-export type {
-  AiGeneration,
-  AiSuggestion,
-  AiGenerationType,
-  AiGenerationStatus,
-  AiSuggestionStatus,
-} from "./ai";
 export type { CustomerNote, NewCustomerNote } from "./customer-notes";
 export type { CustomerTagLink } from "./customer-tags";
 export type {
@@ -216,7 +177,12 @@ export type {
   NewConversationTag,
   ConversationTagLink,
 } from "./conversation-tags";
+export type { ConversationReadState } from "./conversation-read-state";
 export type {
-  ConversationReadState,
-  NewConversationReadState,
-} from "./conversation-read-state";
+  AiGeneration,
+  AiSuggestion,
+  AiGenerationType,
+  AiGenerationStatus,
+  AiSuggestionStatus,
+} from "./ai";
+export type { WebChatInstallation, WebChatVisitor } from "./web-chat";

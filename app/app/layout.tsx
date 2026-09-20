@@ -40,6 +40,11 @@ export default async function AppLayout({
                   </Link>
                 </li>
                 <li>
+                  <Link href="/app/settings/web-chat" className="hover:text-[#141414]">
+                    Web Chat
+                  </Link>
+                </li>
+                <li>
                   <Link href="/app/organization" className="hover:text-[#141414]">
                     Organization
                   </Link>

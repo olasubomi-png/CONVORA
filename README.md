@@ -2,7 +2,7 @@
 
 The communication layer between organizations and the people they serve.
 
-**Current status: Phase 5 — AI agent copilot foundation.**
+**Current status: Phase 6 — Web Chat channel.**
 
 ## Overview
 
