@@ -179,3 +179,16 @@ for O(1) webhook routing.
 - **Watchers**: many per conversation; not assignees
 - **Workload**: aggregate queries (unassigned, per-agent active counts)
 - TEAM LEAD is not ADMIN; team admin actions remain OWNER/ADMIN only in Phase 9
+
+
+## Automation Engine (Phase 10)
+
+```
+Domain Event → emitAutomationEvent → match enabled rules (priority ASC, id ASC)
+  → evaluate structured conditions → execute safe actions → execution row + audit
+```
+
+- **Idempotency**: unique `idempotencyKey = sha256(org:rule:eventKey)`
+- **Loop protection**: `MAX_AUTOMATION_DEPTH = 3`; deeper emissions skipped
+- **No eval / user code / external messaging**
+- **Authz**: OWNER/ADMIN manage rules; members can list

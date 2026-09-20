@@ -2,7 +2,7 @@
 
 The communication layer between organizations and the people they serve.
 
-**Current status: Phase 9 — Team Operations.**
+**Current status: Phase 10 — Automation Engine.**
 
 ## Overview
 

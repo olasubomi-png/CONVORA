@@ -47,6 +47,9 @@ export async function truncateAllTables(): Promise<void> {
   const db = getTestDb();
   await db.execute(sql`
     TRUNCATE TABLE
+      automation_executions,
+      automation_rule_definitions,
+      automation_rules,
       conversation_assignment_history,
       conversation_watchers,
       team_memberships,

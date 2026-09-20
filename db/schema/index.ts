@@ -200,3 +200,12 @@ export type {
   TeamMembership,
   ConversationWatcher,
 } from "./teams";
+
+export {
+  automationRules,
+  automationRuleDefinitions,
+  automationExecutions,
+  automationTriggerTypeEnum,
+  automationExecutionStatusEnum,
+} from "./automation";
+export type { AutomationRule, AutomationExecution } from "./automation";
