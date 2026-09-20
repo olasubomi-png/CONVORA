@@ -30,6 +30,11 @@ export default async function AppLayout({
                   </Link>
                 </li>
                 <li>
+                  <Link href="/app/inbox" className="hover:text-[#141414]">
+                    Inbox
+                  </Link>
+                </li>
+                <li>
                   <Link href="/app/organization" className="hover:text-[#141414]">
                     Organization
                   </Link>
