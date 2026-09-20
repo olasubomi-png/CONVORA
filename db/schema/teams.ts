@@ -164,6 +164,21 @@ export const conversationAssignmentHistory = pgTable(
       foreignColumns: [conversations.organizationId, conversations.id],
       name: "cah_conversation_org_fk",
     }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.organizationId, t.actorMembershipId],
+      foreignColumns: [memberships.organizationId, memberships.id],
+      name: "cah_actor_membership_org_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [t.organizationId, t.previousMembershipId],
+      foreignColumns: [memberships.organizationId, memberships.id],
+      name: "cah_previous_membership_org_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [t.organizationId, t.newMembershipId],
+      foreignColumns: [memberships.organizationId, memberships.id],
+      name: "cah_new_membership_org_fk",
+    }).onDelete("set null"),
   ],
 );
 

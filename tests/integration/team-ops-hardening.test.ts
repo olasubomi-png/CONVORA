@@ -328,3 +328,74 @@ describe("workload isolation", () => {
     expect(w.unassignedCount).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("assignment history tenant membership FKs", () => {
+  it("rejects history row pointing at another org membership", async () => {
+    const ownerA = await seedUser("fk-a@example.com");
+    const ownerB = await seedUser("fk-b@example.com");
+    const orgA = await createOrganizationWithOwner(ownerA.id, {
+      name: "FKA",
+      slug: "fk-a",
+    });
+    await createOrganizationWithOwner(ownerB.id, {
+      name: "FKB",
+      slug: "fk-b",
+    });
+    const customer = await createCustomer(orgA.organizationId, ownerA.id, {
+      displayName: "C",
+    });
+    const conversation = await createConversation(
+      ownerA.id,
+      orgA.organizationId,
+      { customerId: customer.id, initialMessage: "fk" },
+    );
+    const [memB] = await getTestDb()
+      .select()
+      .from(memberships)
+      .where(eq(memberships.userId, ownerB.id));
+
+    await expect(
+      getTestDb().insert(conversationAssignmentHistory).values({
+        organizationId: orgA.organizationId,
+        conversationId: conversation.id,
+        actorMembershipId: memB!.id,
+        previousMembershipId: null,
+        newMembershipId: memB!.id,
+        action: "ASSIGN",
+      }),
+    ).rejects.toBeTruthy();
+  });
+
+  it("accepts valid same-org history row", async () => {
+    const owner = await seedUser("fk-ok@example.com");
+    const org = await createOrganizationWithOwner(owner.id, {
+      name: "FKOK",
+      slug: "fk-ok",
+    });
+    const customer = await createCustomer(org.organizationId, owner.id, {
+      displayName: "C",
+    });
+    const conversation = await createConversation(
+      owner.id,
+      org.organizationId,
+      { customerId: customer.id, initialMessage: "ok" },
+    );
+    const [mem] = await getTestDb()
+      .select()
+      .from(memberships)
+      .where(eq(memberships.userId, owner.id));
+
+    const [row] = await getTestDb()
+      .insert(conversationAssignmentHistory)
+      .values({
+        organizationId: org.organizationId,
+        conversationId: conversation.id,
+        actorMembershipId: mem!.id,
+        previousMembershipId: null,
+        newMembershipId: mem!.id,
+        action: "ASSIGN",
+      })
+      .returning();
+    expect(row?.newMembershipId).toBe(mem!.id);
+  });
+});
