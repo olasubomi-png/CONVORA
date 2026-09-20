@@ -1,0 +1,37 @@
+import { Container } from "@/components/ui/container";
+
+const links = [
+  { href: "#product", label: "Product" },
+  { href: "#capabilities", label: "Capabilities" },
+  { href: "#how-it-works", label: "How it works" },
+  { href: "#security", label: "Security" },
+];
+
+export function SiteHeader() {
+  return (
+    <header className="border-b border-[#e4e4e2] bg-[#f8f8f7]">
+      <Container className="flex h-16 items-center justify-between">
+        <a href="#top" className="text-sm font-semibold tracking-[0.18em]">
+          CONVORA
+        </a>
+        <nav aria-label="Primary">
+          <ul className="hidden items-center gap-8 text-sm text-[#3f3f3f] md:flex">
+            {links.map((link) => (
+              <li key={link.href}>
+                <a href={link.href} className="hover:text-[#141414]">
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <a
+          href="#contact"
+          className="inline-flex items-center border border-[#141414] bg-[#141414] px-3 py-2 text-sm text-white hover:bg-[#2a2a2a]"
+        >
+          Request access
+        </a>
+      </Container>
+    </header>
+  );
+}
