@@ -26,7 +26,7 @@ export async function addCustomerTag(
 
   try {
     await db.transaction(async (tx) => {
-      await tx.insert(customerTagLinks).values({ customerId, tagId });
+      await tx.insert(customerTagLinks).values({ customerId, tagId, organizationId: customer.organizationId });
       await recordAuditEvent(
         {
           eventType: "CUSTOMER_TAG_ADDED",

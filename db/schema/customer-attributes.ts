@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   index,
   primaryKey,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { organizations } from "./organizations";
 import { customers } from "./customers";
@@ -30,7 +31,6 @@ export const customerAttributeDefinitions = pgTable(
     key: text("key").notNull(),
     label: text("label").notNull(),
     type: customerAttributeTypeEnum("type").notNull(),
-    /** SELECT options: string[] */
     options: jsonb("options").$type<string[]>().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -45,20 +45,16 @@ export const customerAttributeDefinitions = pgTable(
       t.key,
     ),
     index("customer_attr_defs_organization_id_idx").on(t.organizationId),
+    uniqueIndex("customer_attr_defs_org_id_unique").on(t.organizationId, t.id),
   ],
 );
 
 export const customerAttributeValues = pgTable(
   "customer_attribute_values",
   {
-    customerId: uuid("customer_id")
-      .notNull()
-      .references(() => customers.id, { onDelete: "cascade" }),
-    definitionId: uuid("definition_id")
-      .notNull()
-      .references(() => customerAttributeDefinitions.id, {
-        onDelete: "cascade",
-      }),
+    customerId: uuid("customer_id").notNull(),
+    definitionId: uuid("definition_id").notNull(),
+    organizationId: uuid("organization_id").notNull(),
     valueText: text("value_text"),
     valueNumber: text("value_number"),
     valueBoolean: text("value_boolean"),
@@ -70,6 +66,20 @@ export const customerAttributeValues = pgTable(
   (t) => [
     primaryKey({ columns: [t.customerId, t.definitionId] }),
     index("customer_attr_values_definition_id_idx").on(t.definitionId),
+    index("customer_attr_values_organization_id_idx").on(t.organizationId),
+    foreignKey({
+      columns: [t.organizationId, t.customerId],
+      foreignColumns: [customers.organizationId, customers.id],
+      name: "customer_attr_values_customer_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.organizationId, t.definitionId],
+      foreignColumns: [
+        customerAttributeDefinitions.organizationId,
+        customerAttributeDefinitions.id,
+      ],
+      name: "customer_attr_values_definition_org_fk",
+    }).onDelete("cascade"),
   ],
 );
 

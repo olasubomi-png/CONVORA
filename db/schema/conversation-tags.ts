@@ -24,6 +24,7 @@ export const conversationTags = pgTable(
   },
   (t) => [
     uniqueIndex("conversation_tags_org_slug_unique").on(t.organizationId, t.slug),
+    uniqueIndex("conversation_tags_org_id_unique").on(t.organizationId, t.id),
     index("conversation_tags_organization_id_idx").on(t.organizationId),
   ],
 );

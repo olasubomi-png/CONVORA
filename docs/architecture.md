@@ -108,3 +108,11 @@ Identity is not global: the same person may exist in multiple organizations as s
 - Merge locks both rows (`FOR UPDATE`, deterministic ID order); rejects already-merged sources
 - Attribute BOOLEAN accepts only true/false (and string forms); SELECT validated against options
 - Activity timeline filters event types in SQL before pagination
+
+
+### Database tenant integrity (Phase 4 final)
+
+- `customers(organization_id, id)` unique; `merged_into_customer_id` self-FK
+- `customer_tag_links.organization_id` + composite FKs to customer and tag
+- `customer_attribute_values.organization_id` + composite FKs to customer and definition
+- Email policy: trim + lowercase; unique among ACTIVE non-null emails per org

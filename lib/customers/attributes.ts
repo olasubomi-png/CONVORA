@@ -67,6 +67,9 @@ export function serializeAttributeValue(
 
   switch (type) {
     case "TEXT":
+      if (typeof value === "object") {
+        throw new ValidationError("TEXT attribute must be a string.");
+      }
       return {
         valueText: String(value).slice(0, 2000),
         valueNumber: null,
@@ -244,6 +247,7 @@ export async function setCustomerAttributes(
         .values({
           customerId,
           definitionId: def.id,
+          organizationId: customer.organizationId,
           ...serialized,
         })
         .onConflictDoUpdate({

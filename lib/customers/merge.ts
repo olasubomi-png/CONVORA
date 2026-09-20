@@ -121,7 +121,11 @@ export async function mergeCustomers(
     for (const link of sourceTags) {
       await tx
         .insert(customerTagLinks)
-        .values({ customerId: canonicalCustomerId, tagId: link.tagId })
+        .values({
+          customerId: canonicalCustomerId,
+          tagId: link.tagId,
+          organizationId: target.organizationId,
+        })
         .onConflictDoNothing();
     }
     await tx
@@ -139,6 +143,7 @@ export async function mergeCustomers(
         .values({
           customerId: canonicalCustomerId,
           definitionId: attr.definitionId,
+          organizationId: target.organizationId,
           valueText: attr.valueText,
           valueNumber: attr.valueNumber,
           valueBoolean: attr.valueBoolean,

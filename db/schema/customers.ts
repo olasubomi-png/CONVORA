@@ -7,6 +7,7 @@ import {
   uuid,
   index,
   uniqueIndex,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { organizations } from "./organizations";
@@ -18,7 +19,7 @@ export const customerStatusEnum = pgEnum("customer_status", [
 
 /**
  * Organization-scoped external contact.
- * Email uniqueness is per organization for ACTIVE customers with non-null email.
+ * Email: trimmed + lowercased before storage; unique per org among ACTIVE rows.
  * MERGED customers are retired and excluded from normal lists.
  */
 export const customers = pgTable(
@@ -37,7 +38,6 @@ export const customers = pgTable(
     location: text("location"),
     internalSummary: text("internal_summary"),
     status: customerStatusEnum("status").notNull().default("ACTIVE"),
-    /** When status=MERGED, points at the canonical surviving customer. */
     mergedIntoCustomerId: uuid("merged_into_customer_id"),
     metadata: jsonb("metadata")
       .$type<Record<string, unknown>>()
@@ -61,6 +61,12 @@ export const customers = pgTable(
     uniqueIndex("customers_org_email_unique")
       .on(t.organizationId, t.email)
       .where(sql`${t.email} IS NOT NULL AND ${t.status} = 'ACTIVE'`),
+    uniqueIndex("customers_org_id_unique").on(t.organizationId, t.id),
+    foreignKey({
+      columns: [t.mergedIntoCustomerId],
+      foreignColumns: [t.id],
+      name: "customers_merged_into_customer_id_fk",
+    }).onDelete("set null"),
   ],
 );
 

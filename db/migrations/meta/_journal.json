@@ -43,6 +43,13 @@
       "when": 1789896029067,
       "tag": "0005_brief_morph",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789898472397,
+      "tag": "0006_previous_phalanx",
+      "breakpoints": true
     }
   ]
 }

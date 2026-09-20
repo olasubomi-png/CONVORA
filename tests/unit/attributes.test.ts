@@ -36,3 +36,14 @@ describe("select attribute validation", () => {
     ).toBe("Silver");
   });
 });
+
+describe("text attribute validation", () => {
+  it("rejects object and array values", () => {
+    expect(() => serializeAttributeValue("TEXT", { a: 1 })).toThrow(
+      ValidationError,
+    );
+    expect(() => serializeAttributeValue("TEXT", [1, 2])).toThrow(
+      ValidationError,
+    );
+  });
+});
