@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8f8f7;
+  --foreground: #141414;
+  --muted: #5c5c5c;
+  --border: #e4e4e2;
+  --accent: #1f4e3d;
+  --accent-hover: #173b2e;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
