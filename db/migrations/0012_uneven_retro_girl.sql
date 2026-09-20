@@ -1,0 +1,3 @@
+ALTER TABLE "channel_installations" ADD COLUMN "provider_resource_id" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "channel_installations_provider_resource_unique" ON "channel_installations" USING btree ("provider","provider_resource_id") WHERE "channel_installations"."provider_resource_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "channel_installations_provider_resource_idx" ON "channel_installations" USING btree ("provider","provider_resource_id");

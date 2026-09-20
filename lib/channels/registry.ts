@@ -2,13 +2,23 @@ import type { ChannelAdapter } from "@/lib/channels/types";
 import { MockChannelAdapter } from "@/lib/channels/adapters/mock";
 import { ValidationError } from "@/lib/errors";
 
+/**
+ * Provider capability registry for **non-credentialed** adapters (e.g. mock).
+ *
+ * Credentialed adapters (WhatsApp Cloud, future Meta/Email) MUST be
+ * construction-scoped to a single installation's credentials and passed
+ * explicitly into processInboundEvent / deliverOutboundMessage.
+ * Never register a credentialed adapter as a global WHATSAPP::whatsapp_cloud
+ * singleton — concurrent webhooks from different orgs would race.
+ */
+
 const adapters = new Map<string, ChannelAdapter>();
 
 function key(channel: string, provider: string): string {
   return `${channel}::${provider}`;
 }
 
-/** Register an adapter instance (tests / future provider boot). */
+/** Register a non-credentialed adapter (tests / mock only). */
 export function registerChannelAdapter(adapter: ChannelAdapter): void {
   adapters.set(key(adapter.channel, adapter.provider), adapter);
 }
@@ -20,7 +30,6 @@ export function getChannelAdapter(input: {
   const found = adapters.get(key(input.channel, input.provider));
   if (found) return found;
 
-  // Default mock for provider "mock" — used in tests and local simulation
   if (input.provider === "mock") {
     const adapter = new MockChannelAdapter({
       channel: input.channel as MockChannelAdapter["channel"],
@@ -31,7 +40,8 @@ export function getChannelAdapter(input: {
   }
 
   throw new ValidationError(
-    `No channel adapter registered for ${input.channel}/${input.provider}.`,
+    `No channel adapter registered for ${input.channel}/${input.provider}. ` +
+      "Credentialed providers must supply an installation-scoped adapter.",
   );
 }
 

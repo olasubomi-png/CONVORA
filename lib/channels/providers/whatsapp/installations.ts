@@ -49,6 +49,7 @@ export async function createWhatsAppInstallation(
         channel: "WHATSAPP",
         provider: WHATSAPP_CLOUD_PROVIDER,
         displayName,
+        providerResourceId: creds.phoneNumberId,
         publicConfig: {
           phoneNumberId: creds.phoneNumberId,
           businessAccountId: creds.businessAccountId ?? null,
@@ -91,23 +92,18 @@ export async function getWhatsAppInstallationByPhoneNumberId(
   phoneNumberId: string,
 ) {
   const db = getDatabase();
-  // publicConfig contains phoneNumberId for lookup
   const rows = await db
     .select()
     .from(channelInstallations)
     .where(
       and(
-        eq(channelInstallations.channel, "WHATSAPP"),
         eq(channelInstallations.provider, WHATSAPP_CLOUD_PROVIDER),
+        eq(channelInstallations.providerResourceId, phoneNumberId),
         eq(channelInstallations.status, "ACTIVE"),
       ),
-    );
-  return (
-    rows.find((r) => {
-      const pc = r.publicConfig as { phoneNumberId?: string };
-      return pc.phoneNumberId === phoneNumberId;
-    }) ?? null
-  );
+    )
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 export async function rotateWhatsAppCredentials(
@@ -144,6 +140,7 @@ export async function rotateWhatsAppCredentials(
       .update(channelInstallations)
       .set({
         encryptedConfig: { ciphertext },
+        providerResourceId: creds.phoneNumberId,
         publicConfig: {
           phoneNumberId: creds.phoneNumberId,
           businessAccountId: creds.businessAccountId ?? null,

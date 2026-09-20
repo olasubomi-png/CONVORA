@@ -12,6 +12,7 @@ import { hashPassword } from "@/lib/auth/password";
 import { createOrganizationWithOwner } from "@/lib/orgs/create";
 import { createChannelInstallation } from "@/lib/channels/installations";
 import { processInboundEvent } from "@/lib/channels/inbound";
+import { getChannelAdapter } from "@/lib/channels/registry";
 import { deliverOutboundMessage } from "@/lib/channels/delivery";
 import {
   registerChannelAdapter,
@@ -73,6 +74,7 @@ describe("channel adapter foundation", () => {
 
     const result = await processInboundEvent({
       installationId: installation.id,
+      adapter: getChannelAdapter({ channel: "WHATSAPP", provider: "mock" }),
       headers: { "x-mock-signature": "mock-webhook-secret" },
       body,
     });
@@ -113,11 +115,13 @@ describe("channel adapter foundation", () => {
     const headers = { "x-mock-signature": "mock-webhook-secret" };
     await processInboundEvent({
       installationId: installation.id,
+      adapter: getChannelAdapter({ channel: "WHATSAPP", provider: "mock" }),
       headers,
       body,
     });
     const b = await processInboundEvent({
       installationId: installation.id,
+      adapter: getChannelAdapter({ channel: "WHATSAPP", provider: "mock" }),
       headers,
       body,
     });
@@ -142,6 +146,7 @@ describe("channel adapter foundation", () => {
     await expect(
       processInboundEvent({
         installationId: installation.id,
+        adapter: getChannelAdapter({ channel: "WHATSAPP", provider: "mock" }),
         headers: { "x-mock-signature": "wrong" },
         body: JSON.stringify({
           eventId: "e",
@@ -172,6 +177,7 @@ describe("channel adapter foundation", () => {
     });
     await processInboundEvent({
       installationId: installation.id,
+      adapter: getChannelAdapter({ channel: "WHATSAPP", provider: "mock" }),
       headers: { "x-mock-signature": "mock-webhook-secret" },
       body,
     });

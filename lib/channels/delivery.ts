@@ -7,7 +7,7 @@ import {
   conversations,
   messages,
 } from "@/db/schema";
-import { getChannelAdapter } from "@/lib/channels/registry";
+import { resolveInstallationAdapter } from "@/lib/channels/resolve-adapter";
 import { recordAuditEvent } from "@/lib/audit";
 import { isUniqueViolation } from "@/lib/db-errors";
 import { NotFoundError, ValidationError } from "@/lib/errors";
@@ -146,10 +146,7 @@ export async function deliverOutboundMessage(input: {
   }
 
   try {
-    const adapter = getChannelAdapter({
-      channel: installation.channel,
-      provider: installation.provider,
-    });
+    const adapter = resolveInstallationAdapter(installation);
     const result = await adapter.sendMessage({
       organizationId: input.organizationId,
       conversationId: conversation.id,

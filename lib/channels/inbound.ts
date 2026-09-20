@@ -10,8 +10,10 @@ import {
   messages,
   conversationParticipants,
 } from "@/db/schema";
-import type { NormalizedInboundMessage } from "@/lib/channels/types";
-import { getChannelAdapter } from "@/lib/channels/registry";
+import type {
+  NormalizedInboundMessage,
+  ChannelAdapter,
+} from "@/lib/channels/types";
 import { recordAuditEvent } from "@/lib/audit";
 import { isUniqueViolation } from "@/lib/db-errors";
 import {
@@ -30,6 +32,8 @@ function hashPayload(body: string): string {
  */
 export async function processInboundEvent(input: {
   installationId: string;
+  /** Installation-scoped adapter; never a global credentialed singleton. */
+  adapter: ChannelAdapter;
   headers: Record<string, string | null>;
   body: string;
 }) {
@@ -43,17 +47,26 @@ export async function processInboundEvent(input: {
     throw new NotFoundError("Installation not found.");
   }
 
-  const adapter = getChannelAdapter({
-    channel: installation.channel,
-    provider: installation.provider,
-  });
+  // Adapter must match installation channel/provider (defense in depth)
+  if (
+    input.adapter.channel !== installation.channel ||
+    input.adapter.provider !== installation.provider
+  ) {
+    throw new AuthorizationError("Adapter does not match installation.");
+  }
 
-  const verification = await adapter.verifyWebhook(input.headers, input.body);
+  const verification = await input.adapter.verifyWebhook(
+    input.headers,
+    input.body,
+  );
   if (!verification.ok) {
     throw new AuthorizationError("Webhook verification failed.");
   }
 
-  const normalized = await adapter.parseInbound(input.headers, input.body);
+  const normalized = await input.adapter.parseInbound(
+    input.headers,
+    input.body,
+  );
   if (!normalized.length) {
     return { processed: 0, results: [] as const };
   }

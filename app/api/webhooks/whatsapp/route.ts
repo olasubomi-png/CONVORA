@@ -4,15 +4,14 @@ import { channelInstallations } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { processInboundEvent } from "@/lib/channels/inbound";
 import {
-  registerChannelAdapter,
-  getChannelAdapter,
-} from "@/lib/channels/registry";
-import {
   WhatsAppCloudAdapter,
   WHATSAPP_CLOUD_PROVIDER,
   verifyWhatsAppChallenge,
 } from "@/lib/channels/providers/whatsapp/adapter";
-import { loadWhatsAppCredentials } from "@/lib/channels/providers/whatsapp/installations";
+import {
+  loadWhatsAppCredentials,
+  getWhatsAppInstallationByPhoneNumberId,
+} from "@/lib/channels/providers/whatsapp/installations";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { RateLimitError } from "@/lib/errors";
 import { jsonError } from "@/lib/api/response";
@@ -22,7 +21,6 @@ export const runtime = "nodejs";
 
 /**
  * GET — Meta webhook verification challenge.
- * Query: hub.mode, hub.verify_token, hub.challenge
  */
 export async function GET(request: Request) {
   try {
@@ -38,7 +36,6 @@ export async function GET(request: Request) {
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
-    // Match installation by verify token (decrypt credentials)
     const db = getDatabase();
     const installations = await db
       .select()
@@ -67,7 +64,7 @@ export async function GET(request: Request) {
           });
         }
       } catch {
-        // Skip installations with bad/missing credentials
+        // skip bad credentials
       }
     }
 
@@ -79,7 +76,7 @@ export async function GET(request: Request) {
 
 /**
  * POST — inbound WhatsApp events.
- * Signature verified before any Conversation Engine work.
+ * Installation-scoped adapter — never a global credentialed singleton.
  */
 export async function POST(request: Request) {
   try {
@@ -95,7 +92,6 @@ export async function POST(request: Request) {
       return new NextResponse("Payload too large", { status: 413 });
     }
 
-    // Parse lightly to discover phone_number_id for installation lookup
     let phoneNumberId: string | null = null;
     try {
       const raw: unknown = JSON.parse(rawBody);
@@ -113,36 +109,15 @@ export async function POST(request: Request) {
       return new NextResponse("Bad Request", { status: 400 });
     }
 
-    const db = getDatabase();
-    const installations = await db
-      .select()
-      .from(channelInstallations)
-      .where(
-        and(
-          eq(channelInstallations.channel, "WHATSAPP"),
-          eq(channelInstallations.provider, WHATSAPP_CLOUD_PROVIDER),
-          eq(channelInstallations.status, "ACTIVE"),
-        ),
-      );
-
-    const installation = installations.find((r) => {
-      const pc = r.publicConfig as { phoneNumberId?: string };
-      return pc.phoneNumberId === phoneNumberId;
-    });
-
+    const installation =
+      await getWhatsAppInstallationByPhoneNumberId(phoneNumberId);
     if (!installation) {
       return new NextResponse("Not Found", { status: 404 });
     }
 
+    // Installation-scoped adapter (credentials for this org only)
     const credentials = loadWhatsAppCredentials(installation);
     const adapter = new WhatsAppCloudAdapter(credentials);
-    registerChannelAdapter(adapter);
-
-    // Ensure registry returns this instance
-    getChannelAdapter({
-      channel: "WHATSAPP",
-      provider: WHATSAPP_CLOUD_PROVIDER,
-    });
 
     const headers: Record<string, string | null> = {
       "x-hub-signature-256": request.headers.get("x-hub-signature-256"),
@@ -150,13 +125,13 @@ export async function POST(request: Request) {
 
     await processInboundEvent({
       installationId: installation.id,
+      adapter,
       headers,
       body: rawBody,
     });
 
     return new NextResponse("EVENT_RECEIVED", { status: 200 });
   } catch (error) {
-    // Always avoid leaking details to Meta; log-safe path via jsonError for non-provider clients
     return jsonError(error);
   }
 }

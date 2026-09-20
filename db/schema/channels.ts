@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   foreignKey,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { organizations } from "./organizations";
 import { customers } from "./customers";
 import { conversations } from "./conversations";
@@ -48,6 +49,11 @@ export const channelInstallations = pgTable(
     provider: text("provider").notNull(),
     displayName: text("display_name").notNull(),
     status: channelInstallationStatusEnum("status").notNull().default("ACTIVE"),
+    /**
+     * Provider-specific public resource id for webhook routing
+     * (e.g. WhatsApp phone_number_id). Unique per provider when set.
+     */
+    providerResourceId: text("provider_resource_id"),
     /** Non-secret public metadata (webhook path key, app id display, etc.) */
     publicConfig: jsonb("public_config")
       .$type<Record<string, unknown>>()
@@ -79,6 +85,13 @@ export const channelInstallations = pgTable(
       t.channel,
       t.provider,
       t.displayName,
+    ),
+    uniqueIndex("channel_installations_provider_resource_unique")
+      .on(t.provider, t.providerResourceId)
+      .where(sql`${t.providerResourceId} IS NOT NULL`),
+    index("channel_installations_provider_resource_idx").on(
+      t.provider,
+      t.providerResourceId,
     ),
   ],
 );

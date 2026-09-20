@@ -150,3 +150,22 @@ WhatsApp Cloud API → Webhook → WhatsAppCloudAdapter
 - Inbound idempotency: provider message id as `externalEventId`
 - Outbound: text only; media outbound returns typed unsupported error
 - Media inbound: placeholder text + metadata (no media download yet)
+
+
+## Installation-scoped adapters
+
+Credentialed provider adapters are **installation-scoped** and must never be
+stored as globally mutable provider-level instances.
+
+```
+Provider registry (mock / capability only)
+      ↓
+Installation credentials (decrypted server-side)
+      ↓
+Installation-scoped adapter instance
+      ↓
+verify / parse / send
+```
+
+WhatsApp `phone_number_id` is stored as `provider_resource_id` (unique per provider)
+for O(1) webhook routing.

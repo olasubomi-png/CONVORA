@@ -12,10 +12,7 @@ import { hashPassword } from "@/lib/auth/password";
 import { createOrganizationWithOwner } from "@/lib/orgs/create";
 import { createWhatsAppInstallation } from "@/lib/channels/providers/whatsapp/installations";
 import { processInboundEvent } from "@/lib/channels/inbound";
-import {
-  registerChannelAdapter,
-  resetChannelAdapterRegistry,
-} from "@/lib/channels/registry";
+import { resetChannelAdapterRegistry } from "@/lib/channels/registry";
 import { WhatsAppCloudAdapter } from "@/lib/channels/providers/whatsapp/adapter";
 import { loadWhatsAppCredentials } from "@/lib/channels/providers/whatsapp/installations";
 import { AuthorizationError } from "@/lib/errors";
@@ -80,7 +77,6 @@ async function setupWa(email: string, slug: string, phoneNumberId = "pn-1") {
   )[0]!;
   const creds = loadWhatsAppCredentials(full);
   const adapter = new WhatsAppCloudAdapter(creds);
-  registerChannelAdapter(adapter);
   return { owner, org, installation, adapter };
 }
 
@@ -133,7 +129,7 @@ describe("WhatsApp Cloud integration", () => {
   });
 
   it("accepts valid signed text webhook", async () => {
-    const { installation } = await setupWa("wa2@example.com", "wa-2");
+    const { installation, adapter } = await setupWa("wa2@example.com", "wa-2");
     const body = textPayload({
       eventId: "wamid.1",
       from: "15551234567",
@@ -141,6 +137,7 @@ describe("WhatsApp Cloud integration", () => {
     });
     const result = await processInboundEvent({
       installationId: installation.id,
+      adapter,
       headers: { "x-hub-signature-256": sign(body) },
       body,
     });
@@ -152,7 +149,7 @@ describe("WhatsApp Cloud integration", () => {
   });
 
   it("rejects invalid signature", async () => {
-    const { installation } = await setupWa("wa3@example.com", "wa-3");
+    const { installation, adapter } = await setupWa("wa3@example.com", "wa-3");
     const body = textPayload({
       eventId: "wamid.2",
       from: "15550001111",
@@ -161,6 +158,7 @@ describe("WhatsApp Cloud integration", () => {
     await expect(
       processInboundEvent({
         installationId: installation.id,
+        adapter,
         headers: { "x-hub-signature-256": "sha256=deadbeef" },
         body,
       }),
@@ -168,7 +166,7 @@ describe("WhatsApp Cloud integration", () => {
   });
 
   it("idempotent on duplicate provider message id", async () => {
-    const { installation } = await setupWa("wa4@example.com", "wa-4");
+    const { installation, adapter } = await setupWa("wa4@example.com", "wa-4");
     const body = textPayload({
       eventId: "wamid.dup",
       from: "15550002222",
@@ -177,11 +175,13 @@ describe("WhatsApp Cloud integration", () => {
     const headers = { "x-hub-signature-256": sign(body) };
     await processInboundEvent({
       installationId: installation.id,
+      adapter,
       headers,
       body,
     });
     const again = await processInboundEvent({
       installationId: installation.id,
+      adapter,
       headers,
       body,
     });
@@ -207,32 +207,15 @@ describe("WhatsApp Cloud integration", () => {
       text: "B",
       phoneNumberId: "pn-b",
     });
-    // Register correct adapter per installation by reloading
-    const fullA = (
-      await getDatabase()
-        .select()
-        .from(channelInstallations)
-        .where(eq(channelInstallations.id, a.installation.id))
-    )[0]!;
-    registerChannelAdapter(
-      new WhatsAppCloudAdapter(loadWhatsAppCredentials(fullA)),
-    );
     await processInboundEvent({
       installationId: a.installation.id,
+      adapter: a.adapter,
       headers: { "x-hub-signature-256": sign(bodyA) },
       body: bodyA,
     });
-    const fullB = (
-      await getDatabase()
-        .select()
-        .from(channelInstallations)
-        .where(eq(channelInstallations.id, b.installation.id))
-    )[0]!;
-    registerChannelAdapter(
-      new WhatsAppCloudAdapter(loadWhatsAppCredentials(fullB)),
-    );
     await processInboundEvent({
       installationId: b.installation.id,
+      adapter: b.adapter,
       headers: {
         "x-hub-signature-256":
           "sha256=" +
