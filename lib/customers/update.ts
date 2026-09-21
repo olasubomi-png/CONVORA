@@ -86,7 +86,20 @@ export async function updateCustomer(
         tx,
       );
 
-      return updated;
+      await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
+    dispatchAutomationEvent({
+      organizationId: updated!.organizationId,
+      triggerType: "customer.updated",
+      eventKey: `customer:${updated!.id}:updated:${Date.now()}`,
+      customerId: updated!.id,
+      customer: {
+        displayName: updated!.displayName,
+        email: updated!.email,
+        phone: updated!.phone,
+      },
+    }),
+  );
+  return updated;
     });
   } catch (error) {
     if (isUniqueViolation(error)) {

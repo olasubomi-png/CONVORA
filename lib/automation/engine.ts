@@ -30,8 +30,7 @@ function buildIdempotencyKey(
 
 /**
  * Emit a domain event into the automation engine.
- * Organization-scoped; never loads rules from other orgs.
- * Loop protection: depth >= MAX_AUTOMATION_DEPTH → skip.
+ * Multi-action executions run in a single transaction with audit.
  */
 export async function emitAutomationEvent(input: {
   organizationId: string;
@@ -69,8 +68,7 @@ export async function emitAutomationEvent(input: {
       .where(eq(automationRuleDefinitions.ruleId, rule.id))
       .limit(1);
 
-    const conditions = (definition?.conditions ??
-      []) as AutomationCondition[];
+    const conditions = (definition?.conditions ?? []) as AutomationCondition[];
     const actions = (definition?.actions ?? []) as AutomationAction[];
 
     const ctx: AutomationContext = {
@@ -103,7 +101,7 @@ export async function emitAutomationEvent(input: {
       input.eventKey,
     );
 
-    // Claim execution row (idempotent)
+    // Claim execution (outside action tx so concurrent claims serialize on unique index)
     let executionId: string;
     try {
       const [row] = await db
@@ -136,40 +134,57 @@ export async function emitAutomationEvent(input: {
     }
 
     try {
-      const results = [];
-      for (const action of actions) {
-        results.push(await executeAction(action, ctx));
-      }
-      await db
-        .update(automationExecutions)
-        .set({
-          status: "SUCCEEDED",
-          result: { actions: results },
-          completedAt: new Date(),
-        })
-        .where(eq(automationExecutions.id, executionId));
+      // All actions + success audit + status in ONE transaction
+      await db.transaction(async (tx) => {
+        const results = [];
+        for (const action of actions) {
+          results.push(await executeAction(action, ctx, tx));
+        }
+        await tx
+          .update(automationExecutions)
+          .set({
+            status: "SUCCEEDED",
+            result: { actions: results },
+            completedAt: new Date(),
+          })
+          .where(eq(automationExecutions.id, executionId));
 
-      await recordAuditEvent({
-        eventType: "AUTOMATION_EXECUTED",
-        organizationId: input.organizationId,
-        payload: { ruleId: rule.id, executionId, triggerType: input.triggerType },
+        await recordAuditEvent(
+          {
+            eventType: "AUTOMATION_EXECUTED",
+            organizationId: input.organizationId,
+            payload: {
+              ruleId: rule.id,
+              executionId,
+              triggerType: input.triggerType,
+            },
+          },
+          tx,
+        );
       });
       executions += 1;
     } catch (error) {
       const reason =
         error instanceof Error ? error.message.slice(0, 300) : "failed";
-      await db
-        .update(automationExecutions)
-        .set({
-          status: "FAILED",
-          failureReason: reason,
-          completedAt: new Date(),
-        })
-        .where(eq(automationExecutions.id, executionId));
-      await recordAuditEvent({
-        eventType: "AUTOMATION_FAILED",
-        organizationId: input.organizationId,
-        payload: { ruleId: rule.id, executionId },
+      // Failure path: mark FAILED + audit in one transaction
+      // Action mutations rolled back with the failed transaction above
+      await db.transaction(async (tx) => {
+        await tx
+          .update(automationExecutions)
+          .set({
+            status: "FAILED",
+            failureReason: reason,
+            completedAt: new Date(),
+          })
+          .where(eq(automationExecutions.id, executionId));
+        await recordAuditEvent(
+          {
+            eventType: "AUTOMATION_FAILED",
+            organizationId: input.organizationId,
+            payload: { ruleId: rule.id, executionId },
+          },
+          tx,
+        );
       });
     }
   }

@@ -37,7 +37,7 @@ export async function createCustomer(
 
   const db = getDatabase();
   try {
-    return await db.transaction(async (tx) => {
+    const created = await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(customers)
         .values({
@@ -67,6 +67,20 @@ export async function createCustomer(
 
       return row;
     });
+    await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
+      dispatchAutomationEvent({
+        organizationId,
+        triggerType: "customer.created",
+        eventKey: `customer:${created.id}:created`,
+        customerId: created.id,
+        customer: {
+          displayName: created.displayName,
+          email: created.email,
+          phone: created.phone,
+        },
+      }),
+    );
+    return created;
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new ConflictError(

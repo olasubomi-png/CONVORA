@@ -1,8 +1,9 @@
 import type { AutomationTriggerType } from "@/lib/automation/types";
+import { dispatchDomainEventReliable } from "@/lib/automation/outbox";
 
 /**
- * Fire-and-forget safe emit from domain services.
- * Uses dynamic import to avoid circular dependencies.
+ * Reliable domain → automation bridge.
+ * Enqueues to outbox then processes synchronously so mutations are not lost.
  */
 export async function dispatchAutomationEvent(input: {
   organizationId: string;
@@ -24,23 +25,17 @@ export async function dispatchAutomationEvent(input: {
   message?: { direction?: string; body?: string };
   depth?: number;
 }): Promise<void> {
-  try {
-    const { emitAutomationEvent } = await import("@/lib/automation/engine");
-    await emitAutomationEvent({
-      organizationId: input.organizationId,
-      triggerType: input.triggerType,
-      eventKey: input.eventKey,
-      context: {
-        conversationId: input.conversationId,
-        customerId: input.customerId,
-        conversation: input.conversation,
-        customer: input.customer,
-        message: input.message,
-        depth: input.depth ?? 0,
-      },
-    });
-  } catch {
-    // Domain operations must not fail because automation failed.
-    // Execution failures are recorded inside the engine when claimed.
-  }
+  await dispatchDomainEventReliable({
+    organizationId: input.organizationId,
+    triggerType: input.triggerType,
+    eventKey: input.eventKey,
+    depth: input.depth,
+    payload: {
+      conversationId: input.conversationId,
+      customerId: input.customerId,
+      conversation: input.conversation as Record<string, unknown> | undefined,
+      customer: input.customer as Record<string, unknown> | undefined,
+      message: input.message as Record<string, unknown> | undefined,
+    },
+  });
 }

@@ -132,3 +132,27 @@ export const automationExecutions = pgTable(
 
 export type AutomationRule = typeof automationRules.$inferSelect;
 export type AutomationExecution = typeof automationExecutions.$inferSelect;
+
+/** Durable domain event outbox for reliable automation dispatch. */
+export const domainEventOutbox = pgTable(
+  "domain_event_outbox",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id").notNull(),
+    triggerType: text("trigger_type").notNull(),
+    eventKey: text("event_key").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    depth: integer("depth").notNull().default(0),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("domain_event_outbox_event_key_unique").on(
+      t.organizationId,
+      t.eventKey,
+    ),
+    index("domain_event_outbox_unprocessed_idx").on(t.processedAt, t.createdAt),
+  ],
+);

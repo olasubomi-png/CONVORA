@@ -42,7 +42,7 @@ export async function assignConversation(
   const db = getDatabase();
 
   try {
-    return await db.transaction(async (tx) => {
+    const assignmentResult = await db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT id FROM conversations WHERE id = ${conversationId} FOR UPDATE`,
       );
@@ -139,20 +139,23 @@ export async function assignConversation(
         tx,
       );
 
-      // automation event after tx
-      void import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
+      return assignment;
+    });
+
+    if (assignmentResult) {
+      await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
         dispatchAutomationEvent({
           organizationId: conversation.organizationId,
           triggerType: "conversation.assigned",
-          eventKey: `conversation:${conversationId}:assigned:${assigneeMembershipId}:${assignment.id}`,
+          eventKey: `conversation:${conversationId}:assigned:${assigneeMembershipId}:${assignmentResult.id}`,
           conversationId,
           conversation: {
             assignedToMembershipId: assigneeMembershipId,
           },
         }),
       );
-      return assignment;
-    });
+    }
+    return assignmentResult;
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new ConflictError(
@@ -244,7 +247,7 @@ export async function unassignConversation(
     );
   });
 
-  void import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
+  await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
     dispatchAutomationEvent({
       organizationId: conversation.organizationId,
       triggerType: "conversation.unassigned",

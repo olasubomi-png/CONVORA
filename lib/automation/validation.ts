@@ -115,7 +115,7 @@ export function parseConditionsStrict(raw: unknown): AutomationCondition[] {
   return result;
 }
 
-export function parseActionsStrict(raw: unknown): AutomationAction[] {
+export function parseActionsStrict(raw: unknown): z.infer<typeof actionSchema>[] {
   if (!Array.isArray(raw)) {
     throw new ValidationError("actions must be an array.");
   }
@@ -130,7 +130,7 @@ export function parseActionsStrict(raw: unknown): AutomationAction[] {
         parsed.error.issues[0]?.message ?? "Invalid action.",
       );
     }
-    result.push(parsed.data as AutomationAction);
+    result.push(parsed.data);
   }
   return result;
 }

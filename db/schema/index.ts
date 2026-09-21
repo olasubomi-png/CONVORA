@@ -209,3 +209,5 @@ export {
   automationExecutionStatusEnum,
 } from "./automation";
 export type { AutomationRule, AutomationExecution } from "./automation";
+export { domainEventOutbox } from "./automation";
+

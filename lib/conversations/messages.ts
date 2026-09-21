@@ -32,8 +32,8 @@ export async function sendAgentMessage(
 
   // Membership already verified active + same org via requireOrgConversation
   const db = getDatabase();
-  return db.transaction(async (tx) => {
-    const [message] = await tx
+  const message = await db.transaction(async (tx) => {
+    const [row] = await tx
       .insert(messages)
       .values({
         conversationId,
@@ -43,15 +43,27 @@ export async function sendAgentMessage(
         messageType: "TEXT",
       })
       .returning();
-    if (!message) throw new Error("Failed to create message");
+    if (!row) throw new Error("Failed to create message");
 
     await tx
       .update(conversations)
-      .set({ lastMessageAt: message.createdAt, updatedAt: new Date() })
+      .set({ lastMessageAt: row.createdAt, updatedAt: new Date() })
       .where(eq(conversations.id, conversationId));
 
-    return message;
+    return row;
   });
+
+  await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
+    dispatchAutomationEvent({
+      organizationId: conversation.organizationId,
+      triggerType: "conversation.message_sent",
+      eventKey: `message:${message.id}:sent`,
+      conversationId,
+      message: { direction: "outbound", body: trimmed.slice(0, 200) },
+    }),
+  );
+
+  return message;
 }
 
 /**

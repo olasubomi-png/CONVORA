@@ -24,9 +24,14 @@ export async function addCustomerTag(
     throw new NotFoundError("Tag not found.");
   }
 
+  let linked = true;
   try {
     await db.transaction(async (tx) => {
-      await tx.insert(customerTagLinks).values({ customerId, tagId, organizationId: customer.organizationId });
+      await tx.insert(customerTagLinks).values({
+        customerId,
+        tagId,
+        organizationId: customer.organizationId,
+      });
       await recordAuditEvent(
         {
           eventType: "CUSTOMER_TAG_ADDED",
@@ -39,9 +44,21 @@ export async function addCustomerTag(
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
-      return tag;
+      linked = false;
+    } else {
+      throw error;
     }
-    throw error;
+  }
+
+  if (linked) {
+    await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
+      dispatchAutomationEvent({
+        organizationId: customer.organizationId,
+        triggerType: "customer.tag_added",
+        eventKey: `customer:${customerId}:tag:${tagId}:added`,
+        customerId,
+      }),
+    );
   }
 
   return tag;
@@ -73,6 +90,15 @@ export async function removeCustomerTag(
       tx,
     );
   });
+
+  await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
+    dispatchAutomationEvent({
+      organizationId: customer.organizationId,
+      triggerType: "customer.tag_removed",
+      eventKey: `customer:${customerId}:tag:${tagId}:removed`,
+      customerId,
+    }),
+  );
 }
 
 export async function listCustomerTags(

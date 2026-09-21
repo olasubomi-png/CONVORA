@@ -201,3 +201,11 @@ Domain Event → emitAutomationEvent → match enabled rules (priority ASC, id A
 - Idempotency is enforced by unique `idempotency_key`.
 - Depth limit 3 stops recursive chains.
 - Notes are authored as the rule creator membership with an `[automation]` body prefix (never customer-facing).
+
+
+### Domain event outbox
+
+Mutations enqueue into `domain_event_outbox` (unique on org + eventKey), then
+`processDomainEventOutbox` runs the automation engine. Failed processing leaves
+`processed_at` null for retry. Multi-action rule executions run in a single
+transaction with execution status + audit.
