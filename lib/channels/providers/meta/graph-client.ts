@@ -1,17 +1,31 @@
 import { AppError } from "@/lib/errors";
 
-const GRAPH_BASE = "https://graph.facebook.com/v21.0";
+/**
+ * Central Graph API version for all Meta channel providers (Messenger + Instagram).
+ * v21.0 is a current Graph API release used by Messenger Platform and
+ * Messenger API for Instagram. Bump here only — never per-provider.
+ */
+export const META_GRAPH_API_VERSION = "v21.0";
+
+const GRAPH_HOST = "https://graph.facebook.com";
 const MAX_RESPONSE_BYTES = 256_000;
 const FETCH_TIMEOUT_MS = 15_000;
 
 export type MetaSendTextResult = {
   messageId: string;
   raw: Record<string, unknown>;
+  /** Absolute URL used (no secrets). Exposed for tests. */
+  requestUrl: string;
 };
 
 /**
  * Minimal Graph API client for Messenger / Instagram messaging.
  * Always uses HTTPS graph.facebook.com — never caller-supplied hosts (SSRF-safe).
+ *
+ * Outbound paths (Meta docs):
+ * - Facebook Page messaging: POST /{page-id}/messages
+ * - Instagram professional messaging: POST /{instagram-user-id}/messages
+ *   (Page access token of the linked Page; path is the IG professional account id)
  */
 export class MetaGraphClient {
   constructor(private readonly accessToken: string) {}
@@ -19,14 +33,17 @@ export class MetaGraphClient {
   async sendTextMessage(input: {
     recipientId: string;
     text: string;
-    /** Page or Instagram business account scoped path; defaults to me */
-    path?: string;
+    /**
+     * Required Graph node id:
+     * - Facebook: Page ID
+     * - Instagram: Instagram professional account ID
+     */
+    path: string;
   }): Promise<MetaSendTextResult> {
-    const path = input.path ?? "me";
-    if (!/^[a-zA-Z0-9_.-]+$/.test(path)) {
+    if (!/^[a-zA-Z0-9_.-]+$/.test(input.path)) {
       throw new AppError("VALIDATION_ERROR", "Invalid Graph path.", 400, true);
     }
-    const url = `${GRAPH_BASE}/${path}/messages`;
+    const url = `${GRAPH_HOST}/${META_GRAPH_API_VERSION}/${input.path}/messages`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
@@ -86,6 +103,7 @@ export class MetaGraphClient {
       return {
         messageId: data.message_id,
         raw: data as Record<string, unknown>,
+        requestUrl: url,
       };
     } finally {
       clearTimeout(timer);

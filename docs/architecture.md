@@ -238,6 +238,15 @@ Meta webhook → installation lookup (page id / IG account id) → installation-
 
 Outbound: agent message → `deliverOutboundMessage` → `resolveInstallationAdapter` → Graph API.
 
+Graph API version is centralized as `META_GRAPH_API_VERSION` (`v21.0`) in
+`lib/channels/providers/meta/graph-client.ts`.
+
+Outbound endpoint patterns:
+- Facebook Messenger: `POST https://graph.facebook.com/{version}/{page-id}/messages`
+- Instagram Messaging: `POST https://graph.facebook.com/{version}/{instagram-user-id}/messages`
+  (auth: Page access token of the linked Page; path is the **Instagram professional account ID**, not the Page ID)
+
+
 Customer identities are provider-scoped (`customer_channel_identities`); Facebook PSID and
 Instagram-scoped ID are never auto-merged by display name.
 

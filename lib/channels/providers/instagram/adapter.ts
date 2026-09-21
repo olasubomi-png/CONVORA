@@ -99,12 +99,13 @@ export class InstagramMessagingAdapter implements ChannelAdapter {
     context: OutboundMessageContext,
   ): Promise<OutboundMessageResult> {
     const client = new MetaGraphClient(this.credentials.pageAccessToken);
-    // Instagram Messaging API: send via page path when pageId known, else me
-    const path = this.credentials.pageId ?? "me";
+    // Messenger API for Instagram: POST /{instagram-user-id}/messages
+    // Auth: Page access token of the Page linked to the IG professional account.
+    // Path MUST be the Instagram professional account ID — not the Facebook Page ID.
     const result = await client.sendTextMessage({
       recipientId: context.recipient.externalId,
       text: context.body,
-      path,
+      path: this.credentials.instagramAccountId,
     });
     return {
       externalMessageId: result.messageId,
