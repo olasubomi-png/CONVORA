@@ -126,3 +126,16 @@ are never authorized solely by client-supplied organization IDs.
 | Server actions (auth) | Rate-limited; no resource IDOR surface |
 
 Public-by-design endpoints never authorize solely by client `organizationId`.
+
+
+## Phase 12 production gate
+
+Verified on GitHub Actions CI (`ci.yml`):
+
+- postgres service + migrations
+- typecheck
+- lint
+- full vitest suite (includes security-matrix + security-phase12)
+- production build (`next build --turbopack`)
+
+Rate limiting remains process-local by design until shared infrastructure is provisioned.
