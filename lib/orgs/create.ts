@@ -13,7 +13,7 @@ import {
 import { TRIAL_DURATION_DAYS, TRIAL_DURATION_MS } from "@/lib/billing/constants";
 
 /**
- * Create an organization, OWNER membership, and 7-day Premium trial
+ * Create an organization, OWNER membership, and 90-day Premium trial
  * in one transaction. Unique slug + unique org subscription guard duplicates.
  */
 export async function createOrganizationWithOwner(

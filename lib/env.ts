@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ConfigurationError } from "@/lib/errors";
 
 const nodeEnvSchema = z.enum(["development", "test", "production"]);
 
@@ -157,14 +158,14 @@ export function getServerEnv(): ServerEnv {
   });
 
   if (!parsed.success) {
-    throw new Error(
+    throw new ConfigurationError(
       `Invalid environment configuration: ${formatEnvIssues(parsed.error)}`,
     );
   }
 
   const productionIssues = validateProductionEnv(parsed.data);
   if (productionIssues.length > 0) {
-    throw new Error(
+    throw new ConfigurationError(
       `Invalid environment configuration: ${productionIssues.join("; ")}`,
     );
   }

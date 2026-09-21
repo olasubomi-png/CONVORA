@@ -37,7 +37,7 @@ async function seedUser(email: string) {
 }
 
 describe("organization trial", () => {
-  it("creates exactly one 7-day Premium trial", async () => {
+  it("creates exactly one 90-day Premium trial", async () => {
     const owner = await seedUser("bill-t@example.com");
     const org = await createOrganizationWithOwner(owner.id, {
       name: "Trial Co",
@@ -68,10 +68,10 @@ describe("organization trial", () => {
   });
 
   it("trial is active before expiration and inactive after", async () => {
-    const owner = await seedUser("bill-7d@example.com");
+    const owner = await seedUser("bill-90d@example.com");
     const org = await createOrganizationWithOwner(owner.id, {
-      name: "Seven",
-      slug: "bill-7d",
+      name: "Ninety",
+      slug: "bill-90d",
     });
     const sub = await getOrganizationSubscription(org.organizationId);
     expect(sub!.status).toBe("TRIALING");

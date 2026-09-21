@@ -12,7 +12,7 @@ Yearly = `floor(monthly_kobo * 12 * 8000 / 10000)` with `yearly_discount_bps = 2
 
 ## Trial
 
-New organizations receive one **7-day TRIALING** subscription on **Premium** entitlements.
+New organizations receive one **90-day TRIALING** subscription on **Premium** entitlements.
 
 Authoritative constant: `TRIAL_DURATION_DAYS` in `lib/billing/constants.ts` (server-side only).
 Created atomically with the organization. Unique `organization_id` on subscriptions prevents duplicates.

@@ -114,7 +114,7 @@ Session cookies: `httpOnly`, `sameSite=lax`, `secure` in production.
 
 1. `GET /api/health` → 200
 2. `GET /api/health/ready` → 200
-3. Sign in / create org (trial starts)
+3. Sign in / create org (90-day trial starts)
 4. Billing page loads plan catalog
 5. Channel webhook verify challenge (Meta/WhatsApp) succeeds with configured tokens
 6. Paystack test mode charge (if keys configured) activates subscription only after verify

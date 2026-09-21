@@ -69,16 +69,16 @@ export default function HomePage() {
     <div id="top">
       <SiteHeader />
       <main>
-        <section className="border-b border-[#e4e4e2] bg-white">
+        <section className="border-b border-[#e5e5e5] bg-white">
           <Container className="grid gap-12 py-20 md:grid-cols-12 md:py-28">
             <div className="md:col-span-7">
-              <p className="text-sm tracking-[0.16em] text-[#5c5c5c]">
+              <p className="text-sm tracking-[0.16em] text-[#525252]">
                 MULTI-CHANNEL CUSTOMER COMMUNICATION
               </p>
               <h1 className="mt-4 max-w-3xl text-4xl leading-tight tracking-tight md:text-5xl">
-                One inbox for every customer conversation.
+                Every customer conversation. One workspace.
               </h1>
-              <p className="mt-6 max-w-2xl text-lg leading-7 text-[#3f3f3f]">
+              <p className="mt-6 max-w-2xl text-lg leading-7 text-[#404040]">
                 CONVORA is the communication layer between organizations and the
                 people they serve—Web Chat, WhatsApp, Facebook Messenger, and
                 Instagram in a single secure workspace for your team.
@@ -86,37 +86,37 @@ export default function HomePage() {
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link
                   href="/register"
-                  className="inline-flex items-center bg-[#1f4e3d] px-4 py-2.5 text-sm text-white hover:bg-[#173b2e]"
+                  className="inline-flex items-center bg-[#0a0a0a] px-4 py-2.5 text-sm text-white hover:bg-[#262626]"
                 >
                   Start free trial
                 </Link>
                 <Link
                   href="/login"
-                  className="inline-flex items-center border border-[#141414] px-4 py-2.5 text-sm text-[#141414] hover:bg-[#f3f3f1]"
+                  className="inline-flex items-center border border-[#e5e5e5] px-4 py-2.5 text-sm text-[#0a0a0a] hover:border-[#0a0a0a]"
                 >
                   Sign in
                 </Link>
               </div>
-              <p className="mt-4 text-sm text-[#5c5c5c]">
-                7-day Premium-level trial. No payment required to start.
+              <p className="mt-4 text-sm text-[#525252]">
+                90-day free Premium-level trial. No payment required to start.
               </p>
             </div>
-            <aside className="border border-[#e4e4e2] bg-[#f8f8f7] p-6 md:col-span-5">
-              <h2 className="text-sm font-medium tracking-[0.12em] text-[#5c5c5c]">
+            <aside className="border border-[#e5e5e5] bg-[#fafafa] p-6 md:col-span-5">
+              <h2 className="text-sm font-medium tracking-[0.12em] text-[#525252]">
                 CHANNELS
               </h2>
               <ul className="mt-4 space-y-3 text-sm">
                 {channels.map((c) => (
                   <li
                     key={c}
-                    className="flex items-center justify-between border-t border-[#e4e4e2] pt-3 first:border-t-0 first:pt-0"
+                    className="flex items-center justify-between border-t border-[#e5e5e5] pt-3 first:border-t-0 first:pt-0"
                   >
                     <span>{c}</span>
-                    <span className="text-[#1f4e3d]">Supported</span>
+                    <span className="text-[#0a0a0a]">Supported</span>
                   </li>
                 ))}
               </ul>
-              <p className="mt-6 text-xs leading-5 text-[#5c5c5c]">
+              <p className="mt-6 text-xs leading-5 text-[#525252]">
                 All channels feed the same conversation engine and shared agent
                 inbox—tenant-isolated per organization.
               </p>
@@ -124,13 +124,13 @@ export default function HomePage() {
           </Container>
         </section>
 
-        <section id="product" className="border-b border-[#e4e4e2] bg-[#f8f8f7]">
+        <section id="product" className="border-b border-[#e5e5e5] bg-[#fafafa]">
           <Container className="py-16 md:py-20">
-            <p className="text-sm tracking-[0.16em] text-[#5c5c5c]">PRODUCT</p>
+            <p className="text-sm tracking-[0.16em] text-[#525252]">PRODUCT</p>
             <h2 className="mt-3 max-w-2xl text-3xl tracking-tight">
               Built for teams that outgrow fragmented inboxes.
             </h2>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-[#3f3f3f]">
+            <p className="mt-4 max-w-2xl text-base leading-7 text-[#404040]">
               CONVORA keeps customers, conversations, agents, and audit history
               inside your organization—so when channels multiply, your
               operations stay coherent.
@@ -139,10 +139,10 @@ export default function HomePage() {
               {valueProps.map((item) => (
                 <article
                   key={item.title}
-                  className="border border-[#e4e4e2] bg-white p-5"
+                  className="border border-[#e5e5e5] bg-white p-5"
                 >
                   <h3 className="text-base font-medium">{item.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-[#3f3f3f]">
+                  <p className="mt-2 text-sm leading-6 text-[#404040]">
                     {item.body}
                   </p>
                 </article>
@@ -151,9 +151,9 @@ export default function HomePage() {
           </Container>
         </section>
 
-        <section id="how-it-works" className="border-b border-[#e4e4e2] bg-white">
+        <section id="how-it-works" className="border-b border-[#e5e5e5] bg-white">
           <Container className="py-16 md:py-20">
-            <p className="text-sm tracking-[0.16em] text-[#5c5c5c]">
+            <p className="text-sm tracking-[0.16em] text-[#525252]">
               HOW IT WORKS
             </p>
             <h2 className="mt-3 text-3xl tracking-tight">
@@ -177,12 +177,12 @@ export default function HomePage() {
                   body: "Agents assign, reply, tag, automate, and use AI suggestions—with analytics on what actually happened.",
                 },
               ].map((s) => (
-                <li key={s.step} className="border border-[#e4e4e2] p-5">
-                  <p className="text-xs tracking-[0.14em] text-[#5c5c5c]">
+                <li key={s.step} className="border border-[#e5e5e5] p-5">
+                  <p className="text-xs tracking-[0.14em] text-[#525252]">
                     {s.step}
                   </p>
                   <h3 className="mt-2 text-base font-medium">{s.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-[#3f3f3f]">
+                  <p className="mt-2 text-sm leading-6 text-[#404040]">
                     {s.body}
                   </p>
                 </li>
@@ -191,26 +191,26 @@ export default function HomePage() {
           </Container>
         </section>
 
-        <section id="security" className="border-b border-[#e4e4e2] bg-[#f8f8f7]">
+        <section id="security" className="border-b border-[#e5e5e5] bg-[#fafafa]">
           <Container className="py-16 md:py-20">
-            <p className="text-sm tracking-[0.16em] text-[#5c5c5c]">SECURITY</p>
+            <p className="text-sm tracking-[0.16em] text-[#525252]">SECURITY</p>
             <h2 className="mt-3 max-w-2xl text-3xl tracking-tight">
               Multi-tenant isolation is not optional.
             </h2>
-            <ul className="mt-8 grid gap-4 text-sm leading-6 text-[#3f3f3f] md:grid-cols-2">
-              <li className="border border-[#e4e4e2] bg-white p-4">
+            <ul className="mt-8 grid gap-4 text-sm leading-6 text-[#404040] md:grid-cols-2">
+              <li className="border border-[#e5e5e5] bg-white p-4">
                 Organization-scoped data with server-side authorization and
                 role-based access (Owner, Admin, Agent).
               </li>
-              <li className="border border-[#e4e4e2] bg-white p-4">
+              <li className="border border-[#e5e5e5] bg-white p-4">
                 Channel credentials encrypted at rest; webhooks verified with
                 provider signatures.
               </li>
-              <li className="border border-[#e4e4e2] bg-white p-4">
+              <li className="border border-[#e5e5e5] bg-white p-4">
                 Opaque server-side sessions, HTTP-only cookies, and audit events
                 for sensitive operations.
               </li>
-              <li className="border border-[#e4e4e2] bg-white p-4">
+              <li className="border border-[#e5e5e5] bg-white p-4">
                 Billing entitlements enforced on the server—never client-side
                 plan checks.
               </li>
@@ -218,38 +218,38 @@ export default function HomePage() {
           </Container>
         </section>
 
-        <section id="pricing" className="border-b border-[#e4e4e2] bg-white">
+        <section id="pricing" className="border-b border-[#e5e5e5] bg-white">
           <Container className="py-16 md:py-20">
-            <p className="text-sm tracking-[0.16em] text-[#5c5c5c]">PRICING</p>
+            <p className="text-sm tracking-[0.16em] text-[#525252]">PRICING</p>
             <h2 className="mt-3 text-3xl tracking-tight">
               Simple plans. Real entitlements.
             </h2>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-[#5c5c5c]">
-              Start with a 7-day trial at Premium-level access. Yearly billing
+            <p className="mt-3 max-w-xl text-sm leading-6 text-[#525252]">
+              Start with a 90-day free trial at Premium-level access. Yearly billing
               includes a 20% discount.
             </p>
             <div className="mt-10 grid gap-6 md:grid-cols-2">
               {plans.map((plan) => (
                 <article
                   key={plan.name}
-                  className="flex flex-col border border-[#e4e4e2] p-6"
+                  className="flex flex-col border border-[#e5e5e5] p-6"
                 >
                   <h3 className="text-lg font-medium">{plan.name}</h3>
                   <p className="mt-3 text-3xl tracking-tight">
                     {plan.price}
-                    <span className="text-base text-[#5c5c5c]">
+                    <span className="text-base text-[#525252]">
                       {plan.period}
                     </span>
                   </p>
-                  <p className="mt-1 text-sm text-[#5c5c5c]">{plan.yearly}</p>
-                  <ul className="mt-6 flex-1 space-y-2 text-sm text-[#3f3f3f]">
+                  <p className="mt-1 text-sm text-[#525252]">{plan.yearly}</p>
+                  <ul className="mt-6 flex-1 space-y-2 text-sm text-[#404040]">
                     {plan.items.map((item) => (
                       <li key={item}>· {item}</li>
                     ))}
                   </ul>
                   <Link
                     href="/register"
-                    className="mt-8 inline-flex items-center justify-center bg-[#1a1a1a] px-4 py-2.5 text-sm text-white hover:bg-[#2a2a2a]"
+                    className="mt-8 inline-flex items-center justify-center bg-[#0a0a0a] px-4 py-2.5 text-sm text-white hover:bg-[#262626]"
                   >
                     Get started
                   </Link>
@@ -259,7 +259,7 @@ export default function HomePage() {
           </Container>
         </section>
 
-        <section className="bg-[#1f4e3d]">
+        <section className="bg-[#0a0a0a]">
           <Container className="py-16 text-center md:py-20">
             <h2 className="text-3xl tracking-tight text-white">
               Put every customer conversation in one place.
@@ -271,7 +271,7 @@ export default function HomePage() {
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Link
                 href="/register"
-                className="inline-flex items-center bg-white px-4 py-2.5 text-sm text-[#1f4e3d] hover:bg-[#f3f3f1]"
+                className="inline-flex items-center bg-white px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#f5f5f5]"
               >
                 Start free trial
               </Link>

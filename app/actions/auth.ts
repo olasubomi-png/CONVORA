@@ -11,6 +11,7 @@ import { parseInput } from "@/lib/validation";
 import { loginSchema, registerSchema } from "@/lib/validation/auth";
 import { isNextRedirectError } from "@/lib/auth/redirect";
 import { logger } from "@/lib/observability/logger";
+import { classifyError } from "@/lib/observability/classify-error";
 
 export type ActionResult =
   | { ok: true }
@@ -26,8 +27,12 @@ function formDataToObject(formData: FormData): Record<string, string> {
 
 function publicActionError(error: unknown): ActionResult {
   if (!isAppError(error)) {
+    const d = classifyError(error);
     logger.error("auth_action_unexpected", {
-      name: error instanceof Error ? error.name : "unknown",
+      name: d.name,
+      code: d.code ?? null,
+      subsystem: d.subsystem ?? null,
+      messageSnippet: d.messageSnippet ?? null,
     });
   }
   const publicError = toPublicError(error);

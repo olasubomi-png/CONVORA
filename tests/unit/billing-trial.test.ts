@@ -6,9 +6,9 @@ import {
 import { isSubscriptionEntitled } from "@/lib/billing/subscriptions";
 
 describe("trial duration constant", () => {
-  it("is exactly 7 days", () => {
-    expect(TRIAL_DURATION_DAYS).toBe(7);
-    expect(TRIAL_DURATION_MS).toBe(7 * 24 * 60 * 60 * 1000);
+  it("is exactly 90 days", () => {
+    expect(TRIAL_DURATION_DAYS).toBe(90);
+    expect(TRIAL_DURATION_MS).toBe(90 * 24 * 60 * 60 * 1000);
   });
 
   it("entitlement window uses trialEndsAt, not client claims", () => {
