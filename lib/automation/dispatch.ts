@@ -1,41 +1,41 @@
 import type { AutomationTriggerType } from "@/lib/automation/types";
-import { dispatchDomainEventReliable } from "@/lib/automation/outbox";
+import {
+  enqueueDomainEvent,
+  flushDomainEventOutbox,
+  type OutboxPayload,
+} from "@/lib/automation/outbox";
+import type { ExtractTablesWithRelations } from "drizzle-orm";
+import type { PgTransaction } from "drizzle-orm/pg-core";
+import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
+import type * as schema from "@/db/schema";
+
+type Tx = PgTransaction<
+  PostgresJsQueryResultHKT,
+  typeof schema,
+  ExtractTablesWithRelations<typeof schema>
+>;
 
 /**
- * Reliable domain → automation bridge.
- * Enqueues to outbox then processes synchronously so mutations are not lost.
+ * Enqueue inside an open transaction (preferred for domain mutations).
  */
-export async function dispatchAutomationEvent(input: {
-  organizationId: string;
-  triggerType: AutomationTriggerType;
-  eventKey: string;
-  conversationId?: string;
-  customerId?: string;
-  conversation?: {
-    status?: string;
-    priority?: string;
-    channel?: string;
-    assignedToMembershipId?: string | null;
-  };
-  customer?: {
-    displayName?: string | null;
-    email?: string | null;
-    phone?: string | null;
-  };
-  message?: { direction?: string; body?: string };
-  depth?: number;
-}): Promise<void> {
-  await dispatchDomainEventReliable({
-    organizationId: input.organizationId,
-    triggerType: input.triggerType,
-    eventKey: input.eventKey,
-    depth: input.depth,
-    payload: {
-      conversationId: input.conversationId,
-      customerId: input.customerId,
-      conversation: input.conversation as Record<string, unknown> | undefined,
-      customer: input.customer as Record<string, unknown> | undefined,
-      message: input.message as Record<string, unknown> | undefined,
-    },
-  });
+export async function enqueueAutomationEvent(
+  input: {
+    organizationId: string;
+    triggerType: AutomationTriggerType;
+    eventKey: string;
+    payload: OutboxPayload;
+    depth?: number;
+  },
+  tx: Tx,
+): Promise<void> {
+  await enqueueDomainEvent(input, tx);
+}
+
+/**
+ * Process outbox after the caller transaction has committed.
+ */
+export async function flushAutomationEvents(
+  organizationId: string,
+): Promise<void> {
+  await flushDomainEventOutbox(organizationId);
 }

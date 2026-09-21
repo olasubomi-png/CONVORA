@@ -7,6 +7,10 @@ import {
   decodeTimeIdCursor,
   encodeTimeIdCursor,
 } from "@/lib/conversations/cursors";
+import {
+  enqueueAutomationEvent,
+  flushAutomationEvents,
+} from "@/lib/automation/dispatch";
 
 const PAGE_SIZE = 50;
 const MAX_PAGE = 100;
@@ -50,19 +54,23 @@ export async function sendAgentMessage(
       .set({ lastMessageAt: row.createdAt, updatedAt: new Date() })
       .where(eq(conversations.id, conversationId));
 
+    await enqueueAutomationEvent(
+      {
+        organizationId: conversation.organizationId,
+        triggerType: "conversation.message_sent",
+        eventKey: `message:${row.id}:sent`,
+        payload: {
+          conversationId,
+          message: { direction: "outbound", body: trimmed.slice(0, 200) },
+        },
+      },
+      tx,
+    );
+
     return row;
   });
 
-  await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
-    dispatchAutomationEvent({
-      organizationId: conversation.organizationId,
-      triggerType: "conversation.message_sent",
-      eventKey: `message:${message.id}:sent`,
-      conversationId,
-      message: { direction: "outbound", body: trimmed.slice(0, 200) },
-    }),
-  );
-
+  await flushAutomationEvents(conversation.organizationId);
   return message;
 }
 

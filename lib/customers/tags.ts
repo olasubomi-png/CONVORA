@@ -5,6 +5,10 @@ import { requireOrgCustomer } from "@/lib/customers/access";
 import { recordAuditEvent } from "@/lib/audit";
 import { NotFoundError } from "@/lib/errors";
 import { isUniqueViolation } from "@/lib/db-errors";
+import {
+  enqueueAutomationEvent,
+  flushAutomationEvents,
+} from "@/lib/automation/dispatch";
 
 export async function addCustomerTag(
   actorUserId: string,
@@ -41,6 +45,15 @@ export async function addCustomerTag(
         },
         tx,
       );
+      await enqueueAutomationEvent(
+        {
+          organizationId: customer.organizationId,
+          triggerType: "customer.tag_added",
+          eventKey: `customer:${customerId}:tag:${tagId}:added`,
+          payload: { customerId },
+        },
+        tx,
+      );
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -51,14 +64,7 @@ export async function addCustomerTag(
   }
 
   if (linked) {
-    await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
-      dispatchAutomationEvent({
-        organizationId: customer.organizationId,
-        triggerType: "customer.tag_added",
-        eventKey: `customer:${customerId}:tag:${tagId}:added`,
-        customerId,
-      }),
-    );
+    await flushAutomationEvents(customer.organizationId);
   }
 
   return tag;
@@ -89,16 +95,18 @@ export async function removeCustomerTag(
       },
       tx,
     );
+    await enqueueAutomationEvent(
+      {
+        organizationId: customer.organizationId,
+        triggerType: "customer.tag_removed",
+        eventKey: `customer:${customerId}:tag:${tagId}:removed`,
+        payload: { customerId },
+      },
+      tx,
+    );
   });
 
-  await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
-    dispatchAutomationEvent({
-      organizationId: customer.organizationId,
-      triggerType: "customer.tag_removed",
-      eventKey: `customer:${customerId}:tag:${tagId}:removed`,
-      customerId,
-    }),
-  );
+  await flushAutomationEvents(customer.organizationId);
 }
 
 export async function listCustomerTags(

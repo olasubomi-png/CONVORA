@@ -133,6 +133,11 @@ export const automationExecutions = pgTable(
 export type AutomationRule = typeof automationRules.$inferSelect;
 export type AutomationExecution = typeof automationExecutions.$inferSelect;
 
+export const domainEventOutboxStatusEnum = pgEnum(
+  "domain_event_outbox_status",
+  ["PENDING", "PROCESSING", "PROCESSED", "FAILED"],
+);
+
 /** Durable domain event outbox for reliable automation dispatch. */
 export const domainEventOutbox = pgTable(
   "domain_event_outbox",
@@ -143,6 +148,9 @@ export const domainEventOutbox = pgTable(
     eventKey: text("event_key").notNull(),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
     depth: integer("depth").notNull().default(0),
+    status: domainEventOutboxStatusEnum("status").notNull().default("PENDING"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastError: text("last_error"),
     processedAt: timestamp("processed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -153,6 +161,6 @@ export const domainEventOutbox = pgTable(
       t.organizationId,
       t.eventKey,
     ),
-    index("domain_event_outbox_unprocessed_idx").on(t.processedAt, t.createdAt),
+    index("domain_event_outbox_status_idx").on(t.status, t.createdAt),
   ],
 );

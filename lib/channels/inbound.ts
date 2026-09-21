@@ -16,6 +16,7 @@ import type {
 } from "@/lib/channels/types";
 import { recordAuditEvent } from "@/lib/audit";
 import { isUniqueViolation } from "@/lib/db-errors";
+import { enqueueAutomationEvent, flushAutomationEvents } from "@/lib/automation/dispatch";
 import {
   NotFoundError,
   AuthorizationError,
@@ -81,6 +82,7 @@ export async function processInboundEvent(input: {
       }),
     );
   }
+  await flushAutomationEvents(installation.organizationId);
   return { processed: results.length, results };
 }
 
@@ -229,6 +231,20 @@ async function processNormalizedMessage(input: {
         })
         .returning();
       if (!message) throw new Error("Failed to create message");
+
+      await enqueueAutomationEvent(
+        {
+          organizationId: installation.organizationId,
+          triggerType: "conversation.message_received",
+          eventKey: `message:${message.id}:received`,
+          payload: {
+            conversationId,
+            customerId,
+            message: { direction: "inbound", body: body.slice(0, 200) },
+          },
+        },
+        tx,
+      );
 
       await tx
         .update(conversations)

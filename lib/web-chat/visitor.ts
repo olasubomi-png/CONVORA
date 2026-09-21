@@ -25,6 +25,10 @@ import {
   AuthorizationError,
 } from "@/lib/errors";
 import { isUniqueViolation } from "@/lib/db-errors";
+import {
+  enqueueAutomationEvent,
+  flushAutomationEvents,
+} from "@/lib/automation/dispatch";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -275,7 +279,7 @@ export async function sendVisitorMessage(
   }
 
   try {
-    return await db.transaction(async (tx) => {
+    const messageResult = await db.transaction(async (tx) => {
       const [message] = await tx
         .insert(messages)
         .values({
@@ -288,6 +292,20 @@ export async function sendVisitorMessage(
         })
         .returning();
       if (!message) throw new Error("Failed to create message");
+
+      await enqueueAutomationEvent(
+        {
+          organizationId: visitor.organizationId,
+          triggerType: "conversation.message_received",
+          eventKey: `message:${message.id}:received`,
+          payload: {
+            conversationId,
+            customerId,
+            message: { direction: "inbound", body: trimmed.slice(0, 200) },
+          },
+        },
+        tx,
+      );
 
       if (clientMessageId) {
         await tx.insert(webChatMessageIdempotency).values({
@@ -305,6 +323,8 @@ export async function sendVisitorMessage(
 
       return message;
     });
+    await flushAutomationEvents(visitor.organizationId);
+    return messageResult;
   } catch (error) {
     if (clientMessageId && isUniqueViolation(error)) {
       const existing = await db

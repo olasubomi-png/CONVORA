@@ -5,6 +5,10 @@ import { requireOrgCustomer } from "@/lib/customers/access";
 import { recordAuditEvent } from "@/lib/audit";
 import { ConflictError } from "@/lib/errors";
 import { isUniqueViolation } from "@/lib/db-errors";
+import {
+  enqueueAutomationEvent,
+  flushAutomationEvents,
+} from "@/lib/automation/dispatch";
 
 export type UpdateCustomerInput = {
   displayName?: string;
@@ -64,13 +68,13 @@ export async function updateCustomer(
 
   const db = getDatabase();
   try {
-    return await db.transaction(async (tx) => {
-      const [updated] = await tx
+    const updated = await db.transaction(async (tx) => {
+      const [row] = await tx
         .update(customers)
         .set(patch)
         .where(eq(customers.id, customerId))
         .returning();
-      if (!updated) throw new Error("Failed to update customer");
+      if (!row) throw new Error("Failed to update customer");
 
       await recordAuditEvent(
         {
@@ -86,21 +90,27 @@ export async function updateCustomer(
         tx,
       );
 
-      await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
-    dispatchAutomationEvent({
-      organizationId: updated!.organizationId,
-      triggerType: "customer.updated",
-      eventKey: `customer:${updated!.id}:updated:${Date.now()}`,
-      customerId: updated!.id,
-      customer: {
-        displayName: updated!.displayName,
-        email: updated!.email,
-        phone: updated!.phone,
-      },
-    }),
-  );
-  return updated;
+      await enqueueAutomationEvent(
+        {
+          organizationId: customer.organizationId,
+          triggerType: "customer.updated",
+          eventKey: `customer:${customerId}:updated:${Date.now()}`,
+          payload: {
+            customerId,
+            customer: {
+              displayName: row.displayName,
+              email: row.email,
+              phone: row.phone,
+            },
+          },
+        },
+        tx,
+      );
+
+      return row;
     });
+    await flushAutomationEvents(customer.organizationId);
+    return updated;
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new ConflictError(

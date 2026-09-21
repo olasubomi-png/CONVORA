@@ -13,6 +13,10 @@ import { recordAuditEvent } from "@/lib/audit";
 import { isAdminRole } from "@/lib/authz/roles";
 import { AuthorizationError, ConflictError } from "@/lib/errors";
 import { isUniqueViolation } from "@/lib/db-errors";
+import {
+  enqueueAutomationEvent,
+  flushAutomationEvents,
+} from "@/lib/automation/dispatch";
 
 /**
  * Assign conversation under row lock so concurrent assigns serialize.
@@ -139,22 +143,24 @@ export async function assignConversation(
         tx,
       );
 
+      await enqueueAutomationEvent(
+        {
+          organizationId: conversation.organizationId,
+          triggerType: "conversation.assigned",
+          eventKey: `conversation:${conversationId}:assigned:${assigneeMembershipId}:${assignment.id}`,
+          payload: {
+            conversationId,
+            conversation: {
+              assignedToMembershipId: assigneeMembershipId,
+            },
+          },
+        },
+        tx,
+      );
       return assignment;
     });
 
-    if (assignmentResult) {
-      await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
-        dispatchAutomationEvent({
-          organizationId: conversation.organizationId,
-          triggerType: "conversation.assigned",
-          eventKey: `conversation:${conversationId}:assigned:${assigneeMembershipId}:${assignmentResult.id}`,
-          conversationId,
-          conversation: {
-            assignedToMembershipId: assigneeMembershipId,
-          },
-        }),
-      );
-    }
+    await flushAutomationEvents(conversation.organizationId);
     return assignmentResult;
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -245,14 +251,17 @@ export async function unassignConversation(
       },
       tx,
     );
+
+    await enqueueAutomationEvent(
+      {
+        organizationId: current.organizationId,
+        triggerType: "conversation.unassigned",
+        eventKey: `conversation:${conversationId}:unassigned:${Date.now()}`,
+        payload: { conversationId },
+      },
+      tx,
+    );
   });
 
-  await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
-    dispatchAutomationEvent({
-      organizationId: conversation.organizationId,
-      triggerType: "conversation.unassigned",
-      eventKey: `conversation:${conversationId}:unassigned:${Date.now()}`,
-      conversationId,
-    }),
-  );
+  await flushAutomationEvents(conversation.organizationId);
 }

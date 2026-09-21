@@ -10,6 +10,10 @@ import { eq } from "drizzle-orm";
 import { recordAuditEvent } from "@/lib/audit";
 import { NotFoundError, AuthorizationError } from "@/lib/errors";
 import { getActiveMembership } from "@/lib/authz/membership";
+import {
+  enqueueAutomationEvent,
+  flushAutomationEvents,
+} from "@/lib/automation/dispatch";
 
 export type CreateConversationInput = {
   customerId: string;
@@ -95,24 +99,28 @@ export async function createConversation(
       tx,
     );
 
+    await enqueueAutomationEvent(
+      {
+        organizationId,
+        triggerType: "conversation.created",
+        eventKey: `conversation:${conversation.id}:created`,
+        payload: {
+          conversationId: conversation.id,
+          customerId: conversation.customerId,
+          conversation: {
+            status: conversation.status,
+            priority: conversation.priority,
+            channel: conversation.channel,
+            assignedToMembershipId: conversation.assignedToMembershipId,
+          },
+        },
+      },
+      tx,
+    );
+
     return conversation;
   });
 
-  void import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
-    dispatchAutomationEvent({
-      organizationId,
-      triggerType: "conversation.created",
-      eventKey: `conversation:${result.id}:created`,
-      conversationId: result.id,
-      customerId: result.customerId,
-      conversation: {
-        status: result.status,
-        priority: result.priority,
-        channel: result.channel,
-        assignedToMembershipId: result.assignedToMembershipId,
-      },
-    }),
-  );
-
+  await flushAutomationEvents(organizationId);
   return result;
 }

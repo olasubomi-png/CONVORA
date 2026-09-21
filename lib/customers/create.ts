@@ -3,6 +3,10 @@ import { customers } from "@/db/schema";
 import { recordAuditEvent } from "@/lib/audit";
 import { ConflictError } from "@/lib/errors";
 import { isUniqueViolation } from "@/lib/db-errors";
+import {
+  enqueueAutomationEvent,
+  flushAutomationEvents,
+} from "@/lib/automation/dispatch";
 import { getActiveMembership } from "@/lib/authz/membership";
 import { AuthorizationError } from "@/lib/errors";
 
@@ -65,21 +69,25 @@ export async function createCustomer(
         tx,
       );
 
+      await enqueueAutomationEvent(
+        {
+          organizationId,
+          triggerType: "customer.created",
+          eventKey: `customer:${row.id}:created`,
+          payload: {
+            customerId: row.id,
+            customer: {
+              displayName: row.displayName,
+              email: row.email,
+              phone: row.phone,
+            },
+          },
+        },
+        tx,
+      );
       return row;
     });
-    await import("@/lib/automation/dispatch").then(({ dispatchAutomationEvent }) =>
-      dispatchAutomationEvent({
-        organizationId,
-        triggerType: "customer.created",
-        eventKey: `customer:${created.id}:created`,
-        customerId: created.id,
-        customer: {
-          displayName: created.displayName,
-          email: created.email,
-          phone: created.phone,
-        },
-      }),
-    );
+    await flushAutomationEvents(organizationId);
     return created;
   } catch (error) {
     if (isUniqueViolation(error)) {
