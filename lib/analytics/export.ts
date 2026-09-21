@@ -24,12 +24,18 @@ export function overviewToCsv(overview: AnalyticsOverview): string {
   lines.push(`meta,range_from,${escapeCsv(overview.range.from)}`);
   lines.push(`meta,range_to,${escapeCsv(overview.range.to)}`);
   lines.push(`meta,preset,${escapeCsv(overview.range.preset)}`);
-  lines.push(`meta,channel,${escapeCsv(overview.filters.channel ?? "")}`);
-  lines.push(`meta,status,${escapeCsv(overview.filters.status ?? "")}`);
-  lines.push(`meta,priority,${escapeCsv(overview.filters.priority ?? "")}`);
-  lines.push(
-    `meta,agentMembershipId,${escapeCsv(overview.filters.agentMembershipId ?? "")}`,
-  );
+  lines.push(`meta,channel,${escapeCsv(overview.filters.channel ?? "all")}`);
+  lines.push(`meta,status,${escapeCsv(overview.filters.status ?? "all")}`);
+  lines.push(`meta,priority,${escapeCsv(overview.filters.priority ?? "all")}`);
+  {
+    const agentId = overview.filters.agentMembershipId;
+    let agentLabel = "all";
+    if (agentId) {
+      const match = overview.agents.find((a) => a.membershipId === agentId);
+      agentLabel = match?.email ?? match?.fullName ?? "selected";
+    }
+    lines.push(`meta,agent,${escapeCsv(agentLabel)}`);
+  }
 
   const s = overview.summary;
   const summaryFields: [string, string | number | null][] = [

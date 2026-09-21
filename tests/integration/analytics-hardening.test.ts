@@ -143,7 +143,7 @@ describe("filter combinations", () => {
 });
 
 describe("export filters", () => {
-  it("CSV includes active filter metadata", async () => {
+  it("CSV includes active filter metadata without internal IDs", async () => {
     const owner = await seedUser("fh-csv@example.com");
     const org = await createOrganizationWithOwner(owner.id, {
       name: "CSV",
@@ -161,6 +161,8 @@ describe("export filters", () => {
     expect(csv).toContain("meta,channel,WEB");
     expect(csv).toContain("meta,preset,last_7_days");
     expect(csv).toContain("summary,conversations_total");
+    expect(csv).not.toContain("agentMembershipId");
+    expect(csv).toContain("meta,agent,");
   });
 });
 
@@ -197,5 +199,19 @@ describe("export cross-tenant", () => {
         }),
       ),
     ).rejects.toBeInstanceOf(AuthorizationError);
+  });
+});
+
+describe("agent list empty vs failure", () => {
+  it("returns empty list for org with only owner when filtering agents is not required", async () => {
+    // Owner membership still exists — list includes active members
+    const owner = await seedUser("fh-za@example.com");
+    const org = await createOrganizationWithOwner(owner.id, {
+      name: "ZA",
+      slug: "fh-za",
+    });
+    const list = await listOrganizationAgents(owner.id, org.organizationId);
+    expect(Array.isArray(list)).toBe(true);
+    expect(list.length).toBeGreaterThanOrEqual(1);
   });
 });

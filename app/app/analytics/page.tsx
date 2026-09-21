@@ -99,9 +99,11 @@ export default async function AnalyticsPage({
   const to = param(params, "to");
 
   let agents: Awaited<ReturnType<typeof listOrganizationAgents>> = [];
+  let agentsError: string | null = null;
   try {
     agents = await listOrganizationAgents(auth.user.id, organizationId);
   } catch {
+    agentsError = "Unable to load agents for this organization.";
     agents = [];
   }
 
@@ -246,14 +248,33 @@ export default async function AnalyticsPage({
             defaultValue={agentMembershipId ?? ""}
             className="border border-[#e4e4e2] bg-white px-2 py-1.5"
             aria-label="Agent filter"
+            disabled={Boolean(agentsError)}
           >
-            <option value="">All agents</option>
-            {agents.map((a) => (
-              <option key={a.membershipId} value={a.membershipId}>
-                {a.fullName ?? a.email} ({a.role})
-              </option>
-            ))}
+            <option value="">
+              {agentsError
+                ? "Agents unavailable"
+                : agents.length === 0
+                  ? "No agents"
+                  : "All agents"}
+            </option>
+            {!agentsError &&
+              agents.map((a) => (
+                <option key={a.membershipId} value={a.membershipId}>
+                  {a.fullName ?? a.email} ({a.role})
+                </option>
+              ))}
           </select>
+          {agentsError ? (
+            <span className="text-xs text-red-700" role="alert">
+              {agentsError}{" "}
+              <a
+                href={`?org=${organizationId}&preset=${preset}${channel ? `&channel=${channel}` : ""}${status ? `&status=${status}` : ""}${priority ? `&priority=${priority}` : ""}${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`}
+                className="underline"
+              >
+                Retry
+              </a>
+            </span>
+          ) : null}
         </label>
         <div className="flex items-end">
           <button
