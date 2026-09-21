@@ -70,6 +70,13 @@ export const conversations = pgTable(
     ),
     index("conversations_customer_id_idx").on(t.customerId),
     index("conversations_assigned_membership_idx").on(t.assignedToMembershipId),
+    index("conversations_org_created_idx").on(t.organizationId, t.createdAt),
+    index("conversations_org_closed_idx").on(t.organizationId, t.closedAt),
+    index("conversations_org_channel_created_idx").on(
+      t.organizationId,
+      t.channel,
+      t.createdAt,
+    ),
   ],
 );
 

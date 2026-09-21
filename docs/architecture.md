@@ -209,3 +209,19 @@ Mutations enqueue into `domain_event_outbox` (unique on org + eventKey), then
 `processDomainEventOutbox` runs the automation engine. Failed processing leaves
 `processed_at` null for retry. Multi-action rule executions run in a single
 transaction with execution status + audit.
+
+
+## Phase 11 — Analytics
+
+Organization-scoped aggregations over live `conversations`, `messages`, and
+`customers` tables. All timestamps are treated as UTC (`timestamptz`).
+
+Metrics: conversation/message/customer volumes, status/priority/channel
+breakdowns, agent assigned/resolved/message counts, average first-response and
+resolution times where data exists.
+
+API: `GET /api/analytics` and `GET /api/analytics/export` (CSV). Filters:
+preset/custom range, channel, status, priority, agent membership.
+
+Authorization: any active organization member. Tenant isolation is enforced by
+`organizationId` membership check plus SQL `organization_id` predicates.
