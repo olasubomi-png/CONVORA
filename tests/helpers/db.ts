@@ -47,6 +47,11 @@ export async function truncateAllTables(): Promise<void> {
   const db = getTestDb();
   await db.execute(sql`
     TRUNCATE TABLE
+      usage_meters,
+      subscription_events,
+      organization_subscriptions,
+      billing_plan_entitlements,
+      billing_plans,
       domain_event_outbox,
       automation_executions,
       automation_rule_definitions,

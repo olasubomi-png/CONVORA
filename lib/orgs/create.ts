@@ -5,10 +5,17 @@ import { recordAuditEvent } from "@/lib/audit";
 import { ConflictError } from "@/lib/errors";
 import { isUniqueViolation } from "@/lib/db-errors";
 import type { CreateOrganizationInput } from "@/lib/validation/auth";
+import { ensureBillingCatalog, getPlanByCode } from "@/lib/billing/plans";
+import {
+  organizationSubscriptions,
+  subscriptionEvents,
+} from "@/db/schema";
+
+const TRIAL_DAYS = 14;
 
 /**
- * Create an organization and OWNER membership in one transaction.
- * Unique slug constraint is the authoritative duplicate guard.
+ * Create an organization, OWNER membership, and 14-day Premium trial
+ * in one transaction. Unique slug + unique org subscription guard duplicates.
  */
 export async function createOrganizationWithOwner(
   userId: string,
@@ -23,6 +30,12 @@ export async function createOrganizationWithOwner(
     .limit(1);
   if (existing[0]) {
     throw new ConflictError("This organization slug is already taken.");
+  }
+
+  await ensureBillingCatalog();
+  const premium = await getPlanByCode("PREMIUM");
+  if (!premium) {
+    throw new Error("PREMIUM plan is not configured");
   }
 
   let result: { organizationId: string; membershipId: string };
@@ -52,6 +65,36 @@ export async function createOrganizationWithOwner(
       if (!membership) {
         throw new Error("Failed to create owner membership");
       }
+
+      const now = new Date();
+      const trialEnds = new Date(
+        now.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000,
+      );
+
+      const [sub] = await tx
+        .insert(organizationSubscriptions)
+        .values({
+          organizationId: org.id,
+          planId: premium.id,
+          status: "TRIALING",
+          trialStartsAt: now,
+          trialEndsAt: trialEnds,
+          currentPeriodStartsAt: now,
+          currentPeriodEndsAt: trialEnds,
+        })
+        .returning({ id: organizationSubscriptions.id });
+      if (!sub) {
+        throw new Error("Failed to create trial subscription");
+      }
+
+      await tx.insert(subscriptionEvents).values({
+        organizationId: org.id,
+        subscriptionId: sub.id,
+        eventType: "TRIAL_STARTED",
+        toStatus: "TRIALING",
+        actorUserId: userId,
+        payload: { trialDays: TRIAL_DAYS, planCode: "PREMIUM" },
+      });
 
       return { organizationId: org.id, membershipId: membership.id };
     });

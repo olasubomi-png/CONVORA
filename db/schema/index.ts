@@ -211,3 +211,20 @@ export {
 export type { AutomationRule, AutomationExecution } from "./automation";
 export { domainEventOutbox } from "./automation";
 
+
+export {
+  billingPlans,
+  billingPlanEntitlements,
+  organizationSubscriptions,
+  subscriptionEvents,
+  usageMeters,
+  planCodeEnum,
+  billingIntervalEnum,
+  subscriptionStatusEnum,
+} from "./billing";
+export type {
+  BillingPlan,
+  OrganizationSubscription,
+  SubscriptionStatus,
+  PlanCode,
+} from "./billing";
