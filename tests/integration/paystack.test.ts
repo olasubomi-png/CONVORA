@@ -14,7 +14,7 @@ import { hasEntitlement } from "@/lib/billing/entitlements";
 import { ENTITLEMENT_KEYS } from "@/lib/billing/entitlement-keys";
 import { nairaToKobo } from "@/lib/billing/money";
 import { getTestDb, setupTestEnv, truncateAllTables } from "../helpers/db";
-import { AuthorizationError, ValidationError } from "@/lib/errors";
+import { AuthorizationError, ValidationError, NotFoundError, InternalError } from "@/lib/errors";
 import { memberships } from "@/db/schema";
 import { createHmac } from "node:crypto";
 
@@ -37,6 +37,10 @@ import {
   paystackVerifyTransaction,
   verifyPaystackWebhookSignature,
 } from "@/lib/billing/paystack/client";
+import {
+  processPaystackWebhook,
+  isPermanentPaymentWebhookError,
+} from "@/lib/billing/paystack/webhook";
 
 beforeAll(() => {
   setupTestEnv();
@@ -273,5 +277,199 @@ describe("Paystack webhook signature", () => {
     expect(verifyPaystackWebhookSignature(body, sig)).toBe(true);
     expect(verifyPaystackWebhookSignature(body, "deadbeef")).toBe(false);
     expect(verifyPaystackWebhookSignature(body, null)).toBe(false);
+  });
+});
+
+
+function signBody(body: string): string {
+  const secret = process.env.PAYSTACK_SECRET_KEY!;
+  return createHmac("sha512", secret).update(body).digest("hex");
+}
+
+describe("Paystack webhook processing", () => {
+  it("classifies permanent vs transient errors", () => {
+    expect(isPermanentPaymentWebhookError(new ValidationError("x"))).toBe(true);
+    expect(isPermanentPaymentWebhookError(new NotFoundError())).toBe(true);
+    expect(isPermanentPaymentWebhookError(new InternalError())).toBe(false);
+    expect(isPermanentPaymentWebhookError(new Error("db down"))).toBe(false);
+  });
+
+  it("rejects invalid signature with 401", async () => {
+    const body = JSON.stringify({
+      event: "charge.success",
+      data: { reference: "convora_abc" },
+    });
+    const result = await processPaystackWebhook({
+      rawBody: body,
+      signatureHeader: "invalid",
+    });
+    expect(result.status).toBe(401);
+  });
+
+  it("rejects malformed JSON with 400", async () => {
+    const body = "{not-json";
+    const result = await processPaystackWebhook({
+      rawBody: body,
+      signatureHeader: signBody(body),
+    });
+    expect(result.status).toBe(400);
+  });
+
+  it("rejects malformed event schema with 400", async () => {
+    const body = JSON.stringify({ event: 123 });
+    const result = await processPaystackWebhook({
+      rawBody: body,
+      signatureHeader: signBody(body),
+    });
+    expect(result.status).toBe(400);
+  });
+
+  it("acknowledges unknown events with 200 without mutation", async () => {
+    const body = JSON.stringify({
+      event: "transfer.success",
+      data: { reference: "x" },
+    });
+    const result = await processPaystackWebhook({
+      rawBody: body,
+      signatureHeader: signBody(body),
+    });
+    expect(result.status).toBe(200);
+    expect(vi.mocked(paystackVerifyTransaction)).not.toHaveBeenCalled();
+  });
+
+  it("activates on valid signed charge.success", async () => {
+    const owner = await seedUser("ps-wh@example.com");
+    const org = await createOrganizationWithOwner(owner.id, {
+      name: "WH",
+      slug: "ps-wh",
+    });
+    const checkout = await initializeCheckout({
+      actorUserId: owner.id,
+      organizationId: org.organizationId,
+      planCode: "STARTER",
+      interval: "MONTHLY",
+      customerEmail: owner.email,
+    });
+    vi.mocked(paystackVerifyTransaction).mockResolvedValue({
+      status: "success",
+      paid: true,
+      amountMinor: checkout.amountMinor,
+      currency: "NGN",
+      reference: checkout.reference,
+      providerTransactionId: "wh-1",
+      customerEmail: owner.email,
+      paidAt: null,
+      channel: null,
+      rawSafe: {},
+    });
+    const body = JSON.stringify({
+      event: "charge.success",
+      data: { reference: checkout.reference, amount: 1 },
+    });
+    const result = await processPaystackWebhook({
+      rawBody: body,
+      signatureHeader: signBody(body),
+    });
+    expect(result.status).toBe(200);
+    const [sub] = await getTestDb()
+      .select()
+      .from(organizationSubscriptions)
+      .where(
+        eq(organizationSubscriptions.organizationId, org.organizationId),
+      );
+    expect(sub?.status).toBe("ACTIVE");
+
+    // Replay
+    const again = await processPaystackWebhook({
+      rawBody: body,
+      signatureHeader: signBody(body),
+    });
+    expect(again.status).toBe(200);
+  });
+
+  it("returns 200 for amount mismatch (permanent) without activation", async () => {
+    const owner = await seedUser("ps-wh-mm@example.com");
+    const org = await createOrganizationWithOwner(owner.id, {
+      name: "WHMM",
+      slug: "ps-wh-mm",
+    });
+    const checkout = await initializeCheckout({
+      actorUserId: owner.id,
+      organizationId: org.organizationId,
+      planCode: "STARTER",
+      interval: "MONTHLY",
+      customerEmail: owner.email,
+    });
+    vi.mocked(paystackVerifyTransaction).mockResolvedValue({
+      status: "success",
+      paid: true,
+      amountMinor: 1,
+      currency: "NGN",
+      reference: checkout.reference,
+      providerTransactionId: "wh-mm",
+      customerEmail: owner.email,
+      paidAt: null,
+      channel: null,
+      rawSafe: {},
+    });
+    const body = JSON.stringify({
+      event: "charge.success",
+      data: { reference: checkout.reference },
+    });
+    const result = await processPaystackWebhook({
+      rawBody: body,
+      signatureHeader: signBody(body),
+    });
+    expect(result.status).toBe(200);
+    const [sub] = await getTestDb()
+      .select()
+      .from(organizationSubscriptions)
+      .where(
+        eq(organizationSubscriptions.organizationId, org.organizationId),
+      );
+    expect(sub?.status).toBe("TRIALING");
+  });
+
+  it("returns 500 on transient Paystack verify failure", async () => {
+    const owner = await seedUser("ps-wh-tr@example.com");
+    const org = await createOrganizationWithOwner(owner.id, {
+      name: "WHTR",
+      slug: "ps-wh-tr",
+    });
+    const checkout = await initializeCheckout({
+      actorUserId: owner.id,
+      organizationId: org.organizationId,
+      planCode: "STARTER",
+      interval: "MONTHLY",
+      customerEmail: owner.email,
+    });
+    vi.mocked(paystackVerifyTransaction).mockRejectedValue(
+      new InternalError("Paystack unavailable"),
+    );
+    const body = JSON.stringify({
+      event: "charge.success",
+      data: { reference: checkout.reference },
+    });
+    const result = await processPaystackWebhook({
+      rawBody: body,
+      signatureHeader: signBody(body),
+    });
+    expect(result.status).toBe(500);
+  });
+
+  it("returns 200 for unknown reference (permanent not found)", async () => {
+    vi.mocked(paystackVerifyTransaction).mockRejectedValue(
+      new NotFoundError("Payment not found."),
+    );
+    // Actually verifyAndActivatePayment throws NotFound before calling paystack if ref missing in DB
+    const body = JSON.stringify({
+      event: "charge.success",
+      data: { reference: "convora_does_not_exist_zzzz" },
+    });
+    const result = await processPaystackWebhook({
+      rawBody: body,
+      signatureHeader: signBody(body),
+    });
+    expect(result.status).toBe(200);
   });
 });
