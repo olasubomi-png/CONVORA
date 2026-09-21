@@ -1,7 +1,8 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { ExtractTablesWithRelations } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
+import { z } from "zod";
 import { getDatabase } from "@/db";
 import * as schema from "@/db/schema";
 import { domainEventOutbox } from "@/db/schema";
@@ -37,6 +38,36 @@ export type OutboxPayload = {
 };
 
 const MAX_ATTEMPTS = 5;
+
+const claimedIdSchema = z.object({
+  id: z.string().uuid(),
+});
+
+/**
+ * Narrow raw SQL RETURNING rows to claimed outbox IDs.
+ * postgres-js/drizzle may return RowList or { rows }.
+ */
+function parseClaimedIds(result: unknown): string[] {
+  let rows: unknown[] = [];
+  if (Array.isArray(result)) {
+    rows = result;
+  } else if (
+    result !== null &&
+    typeof result === "object" &&
+    "rows" in result &&
+    Array.isArray((result as { rows: unknown }).rows)
+  ) {
+    rows = (result as { rows: unknown[] }).rows;
+  }
+  const ids: string[] = [];
+  for (const row of rows) {
+    const parsed = claimedIdSchema.safeParse(row);
+    if (parsed.success) {
+      ids.push(parsed.data.id);
+    }
+  }
+  return ids;
+}
 
 function executor(tx?: Tx) {
   return tx ?? getDatabase();
@@ -76,12 +107,13 @@ export async function enqueueDomainEvent(
 }
 
 /**
- * Claim PENDING rows with FOR UPDATE SKIP LOCKED via raw SQL, then process.
+ * Claim PENDING rows with FOR UPDATE SKIP LOCKED, then process.
+ * Returns number of successfully PROCESSED events.
  */
 export async function processDomainEventOutbox(options?: {
   organizationId?: string;
   limit?: number;
-}): Promise<number> {
+}): Promise<{ processed: number; claimed: number }> {
   const db = getDatabase();
   const limit = options?.limit ?? 20;
 
@@ -104,18 +136,12 @@ export async function processDomainEventOutbox(options?: {
       )
       RETURNING id
     `);
-    const raw = result as unknown;
-    if (raw && typeof raw === "object" && "rows" in raw) {
-      const rows = (raw as { rows: Record<string, unknown>[] }).rows;
-      return rows.map((r) => String(r.id));
-    }
-    if (Array.isArray(raw)) {
-      return (raw as Record<string, unknown>[]).map((r) => String(r.id));
-    }
-    return [] as string[];
+    return parseClaimedIds(result);
   });
 
-  if (!claimedIds.length) return 0;
+  if (!claimedIds.length) {
+    return { processed: 0, claimed: 0 };
+  }
 
   const { emitAutomationEvent } = await import("@/lib/automation/engine");
   let processed = 0;
@@ -165,7 +191,7 @@ export async function processDomainEventOutbox(options?: {
         .where(eq(domainEventOutbox.id, id));
     }
   }
-  return processed;
+  return { processed, claimed: claimedIds.length };
 }
 
 export async function flushDomainEventOutbox(
@@ -173,3 +199,51 @@ export async function flushDomainEventOutbox(
 ): Promise<void> {
   await processDomainEventOutbox({ organizationId, limit: 50 });
 }
+
+/** Test helper: force-reset processed events to PENDING for concurrency tests. */
+export async function resetOutboxToPending(organizationId: string) {
+  const db = getDatabase();
+  await db
+    .update(domainEventOutbox)
+    .set({
+      status: "PENDING",
+      processedAt: null,
+      attemptCount: 0,
+      lastError: null,
+    })
+    .where(
+      and(
+        eq(domainEventOutbox.organizationId, organizationId),
+        inArray(domainEventOutbox.status, ["PROCESSED", "FAILED", "PENDING"]),
+      ),
+    );
+}
+
+/** Test helper: mark a specific event FAILED for retry testing. */
+export async function markOutboxFailed(eventId: string, error: string) {
+  const db = getDatabase();
+  await db
+    .update(domainEventOutbox)
+    .set({
+      status: "FAILED",
+      lastError: error.slice(0, 300),
+      attemptCount: MAX_ATTEMPTS,
+    })
+    .where(eq(domainEventOutbox.id, eventId));
+}
+
+/** Test helper: re-queue a FAILED event for retry. */
+export async function requeueFailedOutboxEvent(eventId: string) {
+  const db = getDatabase();
+  await db
+    .update(domainEventOutbox)
+    .set({
+      status: "PENDING",
+      attemptCount: 0,
+      lastError: null,
+      processedAt: null,
+    })
+    .where(eq(domainEventOutbox.id, eventId));
+}
+
+export { MAX_ATTEMPTS };
