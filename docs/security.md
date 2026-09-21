@@ -81,3 +81,31 @@ In-memory rate limiter; no email verification; no password reset; invite accepta
 - Key: `CHANNEL_SECRETS_KEY` (base64 32-byte) from environment only
 - Ciphertext version prefix `v1:`
 - Missing key → ConfigurationError; never store plaintext tokens in DB for WhatsApp installs
+
+
+## Phase 12 — Enterprise security
+
+### Capability matrix
+Server-side permissions in `lib/authz/permissions.ts` map OWNER / ADMIN / AGENT
+to explicit capabilities (`channels.manage`, `analytics.export`, etc.).
+UI visibility is not authorization.
+
+### Session rotation
+Successful login creates a new session and revokes other active sessions for
+that user (`revokeOtherSessions`), reducing risk from stolen session cookies.
+
+### Production secrets
+`CHANNEL_SECRETS_KEY` is required when `NODE_ENV=production`.
+
+### HTTP security headers
+`next.config.ts` sets CSP (compatible with Next), `X-Frame-Options: DENY`,
+`X-Content-Type-Options: nosniff`, `Referrer-Policy`, and `Cache-Control: no-store`
+for API routes. `poweredByHeader` is disabled.
+
+### Rate limits
+Auth, web-chat, and analytics export use `checkRateLimit`. Default store is
+process-local; production multi-instance deployments must inject a shared provider.
+
+### Webhooks
+WhatsApp webhook verification remains signature + installation scoped. Requests
+are never authorized solely by client-supplied organization IDs.

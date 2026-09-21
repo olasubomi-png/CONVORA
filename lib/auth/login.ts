@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDatabase } from "@/db";
 import { users } from "@/db/schema";
 import { verifyPassword } from "@/lib/auth/password";
-import { createSessionRecord } from "@/lib/auth/session";
+import { createSessionRecord, revokeOtherSessions } from "@/lib/auth/session";
 import { setSessionCookie } from "@/lib/auth/cookies";
 import { recordAuditEvent } from "@/lib/audit";
 import { AuthenticationError } from "@/lib/errors";
@@ -18,6 +18,7 @@ export async function loginUser(input: LoginInput, options?: { setCookie?: boole
   if (!user || !valid || user.status !== "ACTIVE") throw new AuthenticationError("Invalid email or password.");
   await db.update(users).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(users.id, user.id));
   const session = await createSessionRecord(user.id);
+  await revokeOtherSessions(user.id, session.sessionId);
   if (options?.setCookie !== false) {
     try { await setSessionCookie(session.token, session.expiresAt); } catch { /* tests */ }
   }

@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, ne } from "drizzle-orm";
 import { getDatabase } from "@/db";
 import { sessions, users } from "@/db/schema";
 import type { User } from "@/db/schema";
@@ -23,6 +23,26 @@ export async function createSession(userId: string) {
   const record = await createSessionRecord(userId);
   await setSessionCookie(record.token, record.expiresAt);
   return record;
+}
+
+/** Revoke all active sessions for a user except keepSessionId (session rotation). */
+export async function revokeOtherSessions(
+  userId: string,
+  keepSessionId: string,
+): Promise<number> {
+  const db = getDatabase();
+  const result = await db
+    .update(sessions)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(
+        eq(sessions.userId, userId),
+        isNull(sessions.revokedAt),
+        ne(sessions.id, keepSessionId),
+      ),
+    )
+    .returning({ id: sessions.id });
+  return result.length;
 }
 
 async function loadSessionByTokenHash(tokenHash: string): Promise<ActiveSession | null> {

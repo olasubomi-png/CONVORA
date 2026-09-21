@@ -79,6 +79,15 @@ export function getServerEnv(): ServerEnv {
     );
   }
 
+  if (
+    parsed.data.NODE_ENV === "production" &&
+    !parsed.data.CHANNEL_SECRETS_KEY
+  ) {
+    throw new Error(
+      "Invalid environment configuration: CHANNEL_SECRETS_KEY is required in production",
+    );
+  }
+
   cachedEnv = parsed.data;
   return cachedEnv;
 }
