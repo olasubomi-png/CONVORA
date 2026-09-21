@@ -202,7 +202,7 @@ describe("analytics export", () => {
       }),
     );
     const csv = overviewToCsv(overview);
-    expect(csv).toContain("conversationsTotal");
+    expect(csv).toContain("conversations_total");
     expect(csv.split("\n").length).toBeGreaterThan(5);
   });
 });

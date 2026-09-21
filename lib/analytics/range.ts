@@ -31,6 +31,19 @@ function addUtcDays(d: Date, days: number): Date {
 }
 
 /**
+ * Parse YYYY-MM-DD or ISO string as UTC day start (inclusive) or end (exclusive next day).
+ */
+function parseUtcBoundary(value: string, kind: "start" | "end"): Date {
+  const dayOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (dayOnly) {
+    const [y, m, d] = value.split("-").map(Number);
+    const start = new Date(Date.UTC(y!, m! - 1, d!, 0, 0, 0, 0));
+    return kind === "start" ? start : addUtcDays(start, 1);
+  }
+  return new Date(value);
+}
+
+/**
  * Resolve analytics window in UTC. All timestamps in CONVORA are timestamptz.
  */
 export function resolveAnalyticsRange(input: {
@@ -47,8 +60,8 @@ export function resolveAnalyticsRange(input: {
     if (!input.from || !input.to) {
       throw new ValidationError("Custom range requires from and to (ISO dates).");
     }
-    const from = new Date(input.from);
-    const to = new Date(input.to);
+    const from = parseUtcBoundary(input.from, "start");
+    const to = parseUtcBoundary(input.to, "end");
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
       throw new ValidationError("Invalid custom date range.");
     }

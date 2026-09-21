@@ -8,27 +8,21 @@ import {
   users,
 } from "@/db/schema";
 import type { AnalyticsFilters } from "@/lib/analytics/filters";
+import {
+  conversationWindowPredicates,
+  messageWindowPredicates,
+} from "@/lib/analytics/predicates";
 import { enumerateUtcDays } from "@/lib/analytics/range";
 import { requireAnalyticsAccess } from "@/lib/analytics/access";
-import { z } from "zod";
-
-function conversationFilter(f: AnalyticsFilters) {
-  const clauses = [
-    eq(conversations.organizationId, f.organizationId),
-    gte(conversations.createdAt, f.range.from),
-    lt(conversations.createdAt, f.range.to),
-  ];
-  if (f.channel) clauses.push(eq(conversations.channel, f.channel));
-  if (f.status) clauses.push(eq(conversations.status, f.status));
-  if (f.priority) clauses.push(eq(conversations.priority, f.priority));
-  if (f.agentMembershipId) {
-    clauses.push(eq(conversations.assignedToMembershipId, f.agentMembershipId));
-  }
-  return and(...clauses);
-}
 
 export type AnalyticsOverview = {
   range: { from: string; to: string; preset: string };
+  filters: {
+    channel?: string;
+    status?: string;
+    priority?: string;
+    agentMembershipId?: string;
+  };
   summary: {
     conversationsTotal: number;
     conversationsOpen: number;
@@ -65,6 +59,31 @@ export type AnalyticsOverview = {
   }[];
 };
 
+export async function listOrganizationAgents(
+  actorUserId: string,
+  organizationId: string,
+) {
+  await requireAnalyticsAccess(actorUserId, organizationId);
+  const db = getDatabase();
+  return db
+    .select({
+      membershipId: memberships.id,
+      userId: memberships.userId,
+      fullName: users.fullName,
+      email: users.email,
+      role: memberships.role,
+    })
+    .from(memberships)
+    .innerJoin(users, eq(memberships.userId, users.id))
+    .where(
+      and(
+        eq(memberships.organizationId, organizationId),
+        eq(memberships.status, "ACTIVE"),
+      ),
+    )
+    .orderBy(users.email);
+}
+
 export async function getAnalyticsOverview(
   actorUserId: string,
   filters: AnalyticsFilters,
@@ -73,7 +92,13 @@ export async function getAnalyticsOverview(
   const db = getDatabase();
   const orgId = filters.organizationId;
   const { from, to } = filters.range;
-  const convWhere = conversationFilter(filters);
+  const convWhere = conversationWindowPredicates(filters);
+
+  // Messages: join conversations, same conversation filters + message time window
+  const msgWhere = and(
+    messageWindowPredicates(filters),
+    isNull(messages.deletedAt),
+  );
 
   const [statusRows, priorityRows, channelRows, convTotals] = await Promise.all([
     db
@@ -118,20 +143,6 @@ export async function getAnalyticsOverview(
     closed: 0,
   };
 
-  // Messages in range for conversations belonging to org (join for tenancy)
-  const msgBase = and(
-    eq(conversations.organizationId, orgId),
-    gte(messages.createdAt, from),
-    lt(messages.createdAt, to),
-    isNull(messages.deletedAt),
-    filters.channel ? eq(conversations.channel, filters.channel) : undefined,
-    filters.status ? eq(conversations.status, filters.status) : undefined,
-    filters.priority ? eq(conversations.priority, filters.priority) : undefined,
-    filters.agentMembershipId
-      ? eq(conversations.assignedToMembershipId, filters.agentMembershipId)
-      : undefined,
-  );
-
   const [msgCounts] = await db
     .select({
       inbound: sql<number>`count(*) filter (where ${messages.senderType} = 'CUSTOMER')::int`,
@@ -139,9 +150,8 @@ export async function getAnalyticsOverview(
     })
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
-    .where(msgBase);
+    .where(msgWhere);
 
-  // Customers
   const customerWhere = and(
     eq(customers.organizationId, orgId),
     gte(customers.createdAt, from),
@@ -156,7 +166,6 @@ export async function getAnalyticsOverview(
     .from(customers)
     .where(eq(customers.organizationId, orgId));
 
-  // Time series: conversations by day
   const convDays = await db
     .select({
       day: sql<string>`to_char((${conversations.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`,
@@ -164,7 +173,9 @@ export async function getAnalyticsOverview(
     })
     .from(conversations)
     .where(convWhere)
-    .groupBy(sql`to_char((${conversations.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`);
+    .groupBy(
+      sql`to_char((${conversations.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`,
+    );
 
   const msgDays = await db
     .select({
@@ -174,8 +185,10 @@ export async function getAnalyticsOverview(
     })
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
-    .where(msgBase)
-    .groupBy(sql`to_char((${messages.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`);
+    .where(msgWhere)
+    .groupBy(
+      sql`to_char((${messages.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`,
+    );
 
   const custDays = await db
     .select({
@@ -184,7 +197,9 @@ export async function getAnalyticsOverview(
     })
     .from(customers)
     .where(customerWhere)
-    .groupBy(sql`to_char((${customers.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`);
+    .groupBy(
+      sql`to_char((${customers.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`,
+    );
 
   const days = enumerateUtcDays(from, to);
   const convMap = new Map(convDays.map((r) => [r.day, Number(r.count)]));
@@ -196,11 +211,9 @@ export async function getAnalyticsOverview(
   );
   const custMap = new Map(custDays.map((r) => [r.day, Number(r.count)]));
 
-  // Avg resolution time for closed conversations in range
   const [resolution] = await db
     .select({
       avgMs: sql<number | null>`avg(extract(epoch from (${conversations.closedAt} - ${conversations.createdAt})) * 1000)`,
-      closed: sql<number>`count(*)::int`,
     })
     .from(conversations)
     .where(
@@ -211,86 +224,72 @@ export async function getAnalyticsOverview(
       ),
     );
 
-  // First response time via correlated aggregate
-  const fromIso = from.toISOString();
-  const toIso = to.toISOString();
-  const firstResponseRows = await db.execute(sql`
-    SELECT avg(extract(epoch from (sub.first_agent_at - sub.created_at)) * 1000) AS avg_ms
-    FROM (
-      SELECT conv.created_at,
-             min(m.created_at) FILTER (WHERE m.sender_type = 'MEMBERSHIP') AS first_agent_at
-      FROM conversations conv
-      LEFT JOIN messages m ON m.conversation_id = conv.id AND m.deleted_at IS NULL
-      WHERE conv.organization_id = ${orgId}::uuid
-        AND conv.created_at >= ${fromIso}::timestamptz
-        AND conv.created_at < ${toIso}::timestamptz
-      GROUP BY conv.id, conv.created_at
-    ) sub
-    WHERE sub.first_agent_at IS NOT NULL
-  `);
-  let firstResponseAvg: number | null = null;
-  {
-    let rows: unknown[] = [];
-    if (Array.isArray(firstResponseRows)) {
-      rows = firstResponseRows;
-    } else if (
-      firstResponseRows &&
-      typeof firstResponseRows === "object" &&
-      "rows" in firstResponseRows &&
-      Array.isArray((firstResponseRows as { rows: unknown[] }).rows)
-    ) {
-      rows = (firstResponseRows as { rows: unknown[] }).rows;
-    }
-    const parsed = z
-      .object({ avg_ms: z.union([z.number(), z.string(), z.null()]).optional() })
-      .safeParse(rows[0]);
-    if (parsed.success && parsed.data.avg_ms != null) {
-      firstResponseAvg = Math.round(Number(parsed.data.avg_ms));
-    }
-  }
+  // First response: first MEMBERSHIP message per filtered conversation
+  // Uses same conversationPredicates via join
+  const firstResponseSubq = db
+    .select({
+      conversationId: messages.conversationId,
+      firstAgentAt: sql<Date>`min(${messages.createdAt})`.as("first_agent_at"),
+    })
+    .from(messages)
+    .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+    .where(
+      and(
+        conversationWindowPredicates(filters),
+        eq(messages.senderType, "MEMBERSHIP"),
+        isNull(messages.deletedAt),
+      ),
+    )
+    .groupBy(messages.conversationId)
+    .as("fr");
 
-  
+  const [firstResponse] = await db
+    .select({
+      avgMs: sql<number | null>`avg(extract(epoch from (${firstResponseSubq.firstAgentAt} - ${conversations.createdAt})) * 1000)`,
+    })
+    .from(firstResponseSubq)
+    .innerJoin(
+      conversations,
+      eq(firstResponseSubq.conversationId, conversations.id),
+    )
+    .where(convWhere);
+
   const closedCount = Number(totals.closed ?? 0);
   const totalCount = Number(totals.total ?? 0);
-  const resolutionRate =
-    totalCount > 0 ? closedCount / totalCount : null;
+  const resolutionRate = totalCount > 0 ? closedCount / totalCount : null;
 
-  // Agent performance
+  // Agent rows: scoped to org; conversation metrics use same filters
+  const agentMembershipWhere = and(
+    eq(memberships.organizationId, orgId),
+    eq(memberships.status, "ACTIVE"),
+    filters.agentMembershipId
+      ? eq(memberships.id, filters.agentMembershipId)
+      : undefined,
+  );
+
   const agentRows = await db
     .select({
       membershipId: memberships.id,
       userId: memberships.userId,
       fullName: users.fullName,
       email: users.email,
-      assigned: sql<number>`count(distinct ${conversations.id}) filter (where ${conversations.assignedToMembershipId} = ${memberships.id})::int`,
-      resolved: sql<number>`count(distinct ${conversations.id}) filter (where ${conversations.assignedToMembershipId} = ${memberships.id} and ${conversations.status} = 'CLOSED')::int`,
-      avgResolutionMs: sql<number | null>`avg(extract(epoch from (${conversations.closedAt} - ${conversations.createdAt})) * 1000) filter (where ${conversations.assignedToMembershipId} = ${memberships.id} and ${conversations.status} = 'CLOSED' and ${conversations.closedAt} is not null)`,
+      assigned: sql<number>`count(distinct ${conversations.id})::int`,
+      resolved: sql<number>`count(distinct ${conversations.id}) filter (where ${conversations.status} = 'CLOSED')::int`,
+      avgResolutionMs: sql<number | null>`avg(extract(epoch from (${conversations.closedAt} - ${conversations.createdAt})) * 1000) filter (where ${conversations.status} = 'CLOSED' and ${conversations.closedAt} is not null)`,
     })
     .from(memberships)
     .innerJoin(users, eq(memberships.userId, users.id))
     .leftJoin(
       conversations,
       and(
-        eq(conversations.organizationId, orgId),
         eq(conversations.assignedToMembershipId, memberships.id),
-        gte(conversations.createdAt, from),
-        lt(conversations.createdAt, to),
-        filters.channel ? eq(conversations.channel, filters.channel) : undefined,
-        filters.status ? eq(conversations.status, filters.status) : undefined,
-        filters.priority ? eq(conversations.priority, filters.priority) : undefined,
+        conversationWindowPredicates(filters),
       ),
     )
-    .where(
-      and(
-        eq(memberships.organizationId, orgId),
-        eq(memberships.status, "ACTIVE"),
-        filters.agentMembershipId
-          ? eq(memberships.id, filters.agentMembershipId)
-          : undefined,
-      ),
-    )
+    .where(agentMembershipWhere)
     .groupBy(memberships.id, memberships.userId, users.fullName, users.email);
 
+  // Agent messages sent: membership messages on filtered conversations in range
   const agentMsgRows = await db
     .select({
       membershipId: messages.senderMembershipId,
@@ -300,18 +299,20 @@ export async function getAnalyticsOverview(
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
     .where(
       and(
-        eq(conversations.organizationId, orgId),
+        msgWhere,
         eq(messages.senderType, "MEMBERSHIP"),
-        isNull(messages.deletedAt),
-        gte(messages.createdAt, from),
-        lt(messages.createdAt, to),
         isNotNull(messages.senderMembershipId),
+        filters.agentMembershipId
+          ? eq(messages.senderMembershipId, filters.agentMembershipId)
+          : undefined,
       ),
     )
     .groupBy(messages.senderMembershipId);
 
   const msgSentMap = new Map(
-    agentMsgRows.map((r) => [r.membershipId, Number(r.sent)]),
+    agentMsgRows
+      .filter((r) => r.membershipId)
+      .map((r) => [r.membershipId as string, Number(r.sent)]),
   );
 
   const agents = agentRows.map((r) => {
@@ -337,6 +338,12 @@ export async function getAnalyticsOverview(
       to: to.toISOString(),
       preset: filters.preset ?? "last_30_days",
     },
+    filters: {
+      channel: filters.channel,
+      status: filters.status,
+      priority: filters.priority,
+      agentMembershipId: filters.agentMembershipId,
+    },
     summary: {
       conversationsTotal: totalCount,
       conversationsOpen: Number(totals.open ?? 0),
@@ -347,7 +354,10 @@ export async function getAnalyticsOverview(
       customersNew: Number(customersNew?.count ?? 0),
       customersTotal: Number(customersTotal?.count ?? 0),
       resolutionRate,
-      avgFirstResponseMs: firstResponseAvg,
+      avgFirstResponseMs:
+        firstResponse?.avgMs != null
+          ? Math.round(Number(firstResponse.avgMs))
+          : null,
       avgResolutionMs:
         resolution?.avgMs != null ? Math.round(Number(resolution.avgMs)) : null,
     },
@@ -383,4 +393,3 @@ export async function getAnalyticsOverview(
     agents,
   };
 }
-

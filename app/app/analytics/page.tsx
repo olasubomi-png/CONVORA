@@ -1,8 +1,14 @@
 import Link from "next/link";
-import { requireAuthenticatedUser, getUserOrganizationContexts } from "@/lib/authz/context";
+import {
+  requireAuthenticatedUser,
+  getUserOrganizationContexts,
+} from "@/lib/authz/context";
 import { Container } from "@/components/ui/container";
 import { parseAnalyticsFilters } from "@/lib/analytics/filters";
-import { getAnalyticsOverview } from "@/lib/analytics/queries";
+import {
+  getAnalyticsOverview,
+  listOrganizationAgents,
+} from "@/lib/analytics/queries";
 import { ValidationError } from "@/lib/errors";
 
 export const metadata = { title: "Analytics — CONVORA" };
@@ -30,9 +36,7 @@ function BarChart({
 }) {
   const max = Math.max(1, ...data.map((d) => Number(d[valueKey] ?? 0)));
   if (data.length === 0 || data.every((d) => Number(d[valueKey]) === 0)) {
-    return (
-      <p className="text-sm text-[#5c5c5c]">No data for this period.</p>
-    );
+    return <p className="text-sm text-[#5c5c5c]">No data for this period.</p>;
   }
   return (
     <ul className="space-y-2">
@@ -46,16 +50,21 @@ function BarChart({
               <span className="tabular-nums text-[#141414]">{v}</span>
             </div>
             <div className="h-2 bg-[#ecece9]">
-              <div
-                className="h-2 bg-[#1f4e3d]"
-                style={{ width: `${pct}%` }}
-              />
+              <div className="h-2 bg-[#1f4e3d]" style={{ width: `${pct}%` }} />
             </div>
           </li>
         );
       })}
     </ul>
   );
+}
+
+function param(
+  params: Record<string, string | string[] | undefined>,
+  key: string,
+): string | undefined {
+  const v = params[key];
+  return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
 export default async function AnalyticsPage({
@@ -68,9 +77,7 @@ export default async function AnalyticsPage({
   const params = await searchParams;
 
   const organizationId =
-    (typeof params.org === "string" ? params.org : null) ??
-    memberships[0]?.organizationId ??
-    null;
+    param(params, "org") ?? memberships[0]?.organizationId ?? null;
 
   if (!organizationId) {
     return (
@@ -83,14 +90,20 @@ export default async function AnalyticsPage({
     );
   }
 
-  const preset =
-    typeof params.preset === "string" ? params.preset : "last_30_days";
-  const channel =
-    typeof params.channel === "string" ? params.channel : undefined;
-  const status =
-    typeof params.status === "string" ? params.status : undefined;
-  const priority =
-    typeof params.priority === "string" ? params.priority : undefined;
+  const preset = param(params, "preset") ?? "last_30_days";
+  const channel = param(params, "channel");
+  const status = param(params, "status");
+  const priority = param(params, "priority");
+  const agentMembershipId = param(params, "agent");
+  const from = param(params, "from");
+  const to = param(params, "to");
+
+  let agents: Awaited<ReturnType<typeof listOrganizationAgents>> = [];
+  try {
+    agents = await listOrganizationAgents(auth.user.id, organizationId);
+  } catch {
+    agents = [];
+  }
 
   let overview = null;
   let error: string | null = null;
@@ -101,26 +114,26 @@ export default async function AnalyticsPage({
       channel,
       status,
       priority,
+      agentMembershipId,
+      from,
+      to,
     });
     overview = await getAnalyticsOverview(auth.user.id, filters);
   } catch (e) {
     error =
-      e instanceof ValidationError
-        ? e.message
-        : "Unable to load analytics.";
+      e instanceof ValidationError ? e.message : "Unable to load analytics.";
   }
 
-  const qs = (extra: Record<string, string>) => {
-    const p = new URLSearchParams({ org: organizationId, preset, ...extra });
-    if (channel) p.set("channel", channel);
-    if (status) p.set("status", status);
-    if (priority) p.set("priority", priority);
-    for (const [k, v] of Object.entries(extra)) {
-      if (!v) p.delete(k);
-      else p.set(k, v);
-    }
-    return `?${p.toString()}`;
-  };
+  const exportParams = new URLSearchParams({
+    organizationId,
+    preset,
+  });
+  if (channel) exportParams.set("channel", channel);
+  if (status) exportParams.set("status", status);
+  if (priority) exportParams.set("priority", priority);
+  if (agentMembershipId) exportParams.set("agentMembershipId", agentMembershipId);
+  if (from) exportParams.set("from", from);
+  if (to) exportParams.set("to", to);
 
   return (
     <Container className="py-10">
@@ -128,18 +141,21 @@ export default async function AnalyticsPage({
         <div>
           <h1 className="text-2xl tracking-tight">Analytics</h1>
           <p className="mt-1 text-sm text-[#5c5c5c]">
-            Organization performance from live conversation data (UTC).
+            Live organization metrics. All times are UTC.
           </p>
         </div>
         <a
-          href={`/api/analytics/export?organizationId=${organizationId}&preset=${preset}${channel ? `&channel=${channel}` : ""}`}
+          href={`/api/analytics/export?${exportParams.toString()}`}
           className="border border-[#e4e4e2] bg-white px-3 py-2 text-sm hover:bg-[#f8f8f7]"
         >
           Export CSV
         </a>
       </div>
 
-      <form className="mt-6 flex flex-wrap gap-3 border border-[#e4e4e2] bg-white p-4 text-sm">
+      <form
+        method="get"
+        className="mt-6 grid gap-3 border border-[#e4e4e2] bg-white p-4 text-sm sm:grid-cols-2 lg:grid-cols-4"
+      >
         <input type="hidden" name="org" value={organizationId} />
         <label className="flex flex-col gap-1">
           <span className="text-[#5c5c5c]">Range</span>
@@ -147,13 +163,35 @@ export default async function AnalyticsPage({
             name="preset"
             defaultValue={preset}
             className="border border-[#e4e4e2] bg-white px-2 py-1.5"
+            aria-label="Date range preset"
           >
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
             <option value="last_7_days">Last 7 days</option>
             <option value="last_30_days">Last 30 days</option>
             <option value="last_90_days">Last 90 days</option>
+            <option value="custom">Custom</option>
           </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[#5c5c5c]">From (UTC)</span>
+          <input
+            type="date"
+            name="from"
+            defaultValue={from ?? ""}
+            className="border border-[#e4e4e2] bg-white px-2 py-1.5"
+            aria-label="Custom range start"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[#5c5c5c]">To (UTC)</span>
+          <input
+            type="date"
+            name="to"
+            defaultValue={to ?? ""}
+            className="border border-[#e4e4e2] bg-white px-2 py-1.5"
+            aria-label="Custom range end"
+          />
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-[#5c5c5c]">Channel</span>
@@ -161,6 +199,7 @@ export default async function AnalyticsPage({
             name="channel"
             defaultValue={channel ?? ""}
             className="border border-[#e4e4e2] bg-white px-2 py-1.5"
+            aria-label="Channel filter"
           >
             <option value="">All</option>
             <option value="WEB">Web</option>
@@ -178,6 +217,7 @@ export default async function AnalyticsPage({
             name="status"
             defaultValue={status ?? ""}
             className="border border-[#e4e4e2] bg-white px-2 py-1.5"
+            aria-label="Status filter"
           >
             <option value="">All</option>
             <option value="OPEN">Open</option>
@@ -191,6 +231,7 @@ export default async function AnalyticsPage({
             name="priority"
             defaultValue={priority ?? ""}
             className="border border-[#e4e4e2] bg-white px-2 py-1.5"
+            aria-label="Priority filter"
           >
             <option value="">All</option>
             <option value="NORMAL">Normal</option>
@@ -198,16 +239,36 @@ export default async function AnalyticsPage({
             <option value="URGENT">Urgent</option>
           </select>
         </label>
-        <button
-          type="submit"
-          className="self-end bg-[#1f4e3d] px-4 py-2 text-white hover:bg-[#173b2e]"
-        >
-          Apply
-        </button>
+        <label className="flex flex-col gap-1">
+          <span className="text-[#5c5c5c]">Agent</span>
+          <select
+            name="agent"
+            defaultValue={agentMembershipId ?? ""}
+            className="border border-[#e4e4e2] bg-white px-2 py-1.5"
+            aria-label="Agent filter"
+          >
+            <option value="">All agents</option>
+            {agents.map((a) => (
+              <option key={a.membershipId} value={a.membershipId}>
+                {a.fullName ?? a.email} ({a.role})
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex items-end">
+          <button
+            type="submit"
+            className="bg-[#1f4e3d] px-4 py-2 text-white hover:bg-[#173b2e]"
+          >
+            Apply filters
+          </button>
+        </div>
       </form>
 
       {error ? (
-        <p className="mt-6 text-sm text-red-700">{error}</p>
+        <p className="mt-6 text-sm text-red-700" role="alert">
+          {error}
+        </p>
       ) : null}
 
       {!error && overview ? (
@@ -353,7 +414,10 @@ export default async function AnalyticsPage({
 
           <p className="mt-6 text-xs text-[#5c5c5c]">
             Window: {overview.range.from} → {overview.range.to} (UTC).{" "}
-            <Link href={qs({ preset: "last_7_days" })} className="underline">
+            <Link
+              href={`/app/analytics?org=${organizationId}&preset=last_7_days`}
+              className="underline"
+            >
               7 days
             </Link>
           </p>
