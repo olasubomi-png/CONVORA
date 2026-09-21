@@ -1,4 +1,5 @@
 import { requireAuthenticatedUser } from "@/lib/authz/context";
+import { requirePermission } from "@/lib/authz/permissions";
 import {
   createChannelInstallation,
   listChannelInstallations,
@@ -30,6 +31,7 @@ export async function GET(request: Request) {
       "organizationId",
     );
     if (!organizationId) throw new ValidationError("organizationId is required.");
+    await requirePermission(auth.user.id, organizationId, "channels.view");
     const installations = await listChannelInstallations(
       auth.user.id,
       organizationId,
@@ -45,6 +47,7 @@ export async function POST(request: Request) {
     const auth = await requireAuthenticatedUser();
     const body = await request.json();
     const input = parseInput(createSchema, body);
+    await requirePermission(auth.user.id, input.organizationId, "channels.manage");
     const installation = await createChannelInstallation(
       auth.user.id,
       input.organizationId,

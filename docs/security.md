@@ -109,3 +109,20 @@ process-local; production multi-instance deployments must inject a shared provid
 ### Webhooks
 WhatsApp webhook verification remains signature + installation scoped. Requests
 are never authorized solely by client-supplied organization IDs.
+
+
+## Authorization surface map (Phase 12)
+
+| Surface | Auth model |
+| --- | --- |
+| `/api/analytics*` | Session + `analytics.view` / `analytics.export` + org membership |
+| `/api/channels/*`, WhatsApp install | Session + `channels.view`/`channels.manage` + admin role in domain |
+| `/api/automations*` | Session + `automations.view`/`automations.manage` + admin in domain |
+| `/api/conversations*`, `/api/customers*` | Session + active membership; resource org-scoped domain guards |
+| `/api/ai/*` | Session + membership via domain AI services |
+| `/api/web-chat/installations*` | Session + admin domain checks |
+| `/api/web-chat/session|messages|events` | Public widget model: installation key + origin + visitor token |
+| `/api/webhooks/whatsapp` | Provider signature + installation binding (not session) |
+| Server actions (auth) | Rate-limited; no resource IDOR surface |
+
+Public-by-design endpoints never authorize solely by client `organizationId`.

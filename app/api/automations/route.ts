@@ -1,4 +1,5 @@
 import { requireAuthenticatedUser } from "@/lib/authz/context";
+import { requirePermission } from "@/lib/authz/permissions";
 import {
   createAutomationRule,
   listAutomationRules,
@@ -16,6 +17,7 @@ export async function GET(request: Request) {
     if (!organizationId) {
       throw new ValidationError("organizationId is required.");
     }
+    await requirePermission(auth.user.id, organizationId, "automations.view");
     if (url.searchParams.get("executions") === "1") {
       const executions = await listExecutions(auth.user.id, organizationId);
       return jsonOk({ executions });
@@ -44,6 +46,7 @@ export async function POST(request: Request) {
       }),
       body,
     );
+    await requirePermission(auth.user.id, input.organizationId, "automations.manage");
     const result = await createAutomationRule(
       auth.user.id,
       input.organizationId,

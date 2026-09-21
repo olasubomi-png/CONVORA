@@ -1,4 +1,5 @@
 import { requireAuthenticatedUser } from "@/lib/authz/context";
+import { requirePermission } from "@/lib/authz/permissions";
 import { createWhatsAppInstallation } from "@/lib/channels/providers/whatsapp/installations";
 import { listChannelInstallations } from "@/lib/channels/installations";
 import { parseInput, z } from "@/lib/validation";
@@ -27,6 +28,7 @@ export async function GET(request: Request) {
     if (!organizationId) {
       throw new ValidationError("organizationId is required.");
     }
+    await requirePermission(auth.user.id, organizationId, "channels.view");
     const all = await listChannelInstallations(auth.user.id, organizationId);
     const installations = all.filter(
       (i) => i.provider === WHATSAPP_CLOUD_PROVIDER,
@@ -42,6 +44,7 @@ export async function POST(request: Request) {
     const auth = await requireAuthenticatedUser();
     const body = await request.json();
     const input = parseInput(createSchema, body);
+    await requirePermission(auth.user.id, input.organizationId, "channels.manage");
     const installation = await createWhatsAppInstallation(
       auth.user.id,
       input.organizationId,
