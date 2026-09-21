@@ -22,6 +22,10 @@ const serverEnvSchema = z.object({
   OPENAI_MODEL: z.string().min(1).default("gpt-4o-mini"),
   /** Base64-encoded 32-byte AES key for channel credential encryption. */
   CHANNEL_SECRETS_KEY: z.string().min(1).optional(),
+  /** Paystack secret key (server-only). Required in production when payments enabled. */
+  PAYSTACK_SECRET_KEY: z.string().min(1).optional(),
+  /** Paystack public key (safe for client checkout). */
+  PAYSTACK_PUBLIC_KEY: z.string().min(1).optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -41,6 +45,8 @@ export function parseServerEnv(
     OPENAI_API_KEY: source.OPENAI_API_KEY,
     OPENAI_MODEL: source.OPENAI_MODEL,
     CHANNEL_SECRETS_KEY: source.CHANNEL_SECRETS_KEY,
+    PAYSTACK_SECRET_KEY: source.PAYSTACK_SECRET_KEY,
+    PAYSTACK_PUBLIC_KEY: source.PAYSTACK_PUBLIC_KEY,
   });
 
   if (!result.success) {
@@ -71,6 +77,8 @@ export function getServerEnv(): ServerEnv {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_MODEL: process.env.OPENAI_MODEL,
     CHANNEL_SECRETS_KEY: process.env.CHANNEL_SECRETS_KEY,
+    PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY,
+    PAYSTACK_PUBLIC_KEY: process.env.PAYSTACK_PUBLIC_KEY,
   });
 
   if (!parsed.success) {
@@ -85,6 +93,16 @@ export function getServerEnv(): ServerEnv {
   ) {
     throw new Error(
       "Invalid environment configuration: CHANNEL_SECRETS_KEY is required in production",
+    );
+  }
+
+  if (
+    parsed.data.NODE_ENV === "production" &&
+    parsed.data.PAYSTACK_PUBLIC_KEY &&
+    !parsed.data.PAYSTACK_SECRET_KEY
+  ) {
+    throw new Error(
+      "Invalid environment configuration: PAYSTACK_SECRET_KEY is required when PAYSTACK_PUBLIC_KEY is set in production",
     );
   }
 

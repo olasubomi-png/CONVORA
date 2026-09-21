@@ -188,3 +188,66 @@ export type OrganizationSubscription =
 export type SubscriptionStatus =
   (typeof subscriptionStatusEnum.enumValues)[number];
 export type PlanCode = (typeof planCodeEnum.enumValues)[number];
+
+
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "PENDING",
+  "SUCCESS",
+  "FAILED",
+  "ABANDONED",
+  "REVERSED",
+]);
+
+/**
+ * Payment attempts. Amounts in minor units (kobo).
+ * Provider reference uniquely identifies Paystack transactions.
+ */
+export const paymentTransactions = pgTable(
+  "payment_transactions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id").notNull(),
+    subscriptionId: uuid("subscription_id"),
+    provider: text("provider").notNull().default("paystack"),
+    /** Internal reference sent to Paystack (unique). */
+    reference: text("reference").notNull(),
+    providerTransactionId: text("provider_transaction_id"),
+    planCode: planCodeEnum("plan_code").notNull(),
+    billingInterval: billingIntervalEnum("billing_interval").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull().default("NGN"),
+    status: paymentStatusEnum("status").notNull().default("PENDING"),
+    customerEmail: text("customer_email"),
+    authorizationUrl: text("authorization_url"),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    failureCode: text("failure_code"),
+    failureMessage: text("failure_message"),
+    /** Safe subset of provider data (no secrets). */
+    providerMeta: jsonb("provider_meta")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("payment_transactions_reference_unique").on(t.reference),
+    index("payment_transactions_provider_tx_idx").on(
+      t.provider,
+      t.providerTransactionId,
+    ),
+    index("payment_transactions_org_idx").on(t.organizationId),
+    foreignKey({
+      columns: [t.organizationId],
+      foreignColumns: [organizations.id],
+      name: "payment_transactions_org_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
+export type PaymentStatus = (typeof paymentStatusEnum.enumValues)[number];

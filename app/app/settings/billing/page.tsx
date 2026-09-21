@@ -10,6 +10,8 @@ import { formatNairaFromKobo } from "@/lib/billing/money";
 import { getUsageQuantity } from "@/lib/billing/usage";
 import { ENTITLEMENT_KEYS, METER_KEYS } from "@/lib/billing/entitlement-keys";
 import Link from "next/link";
+import { CheckoutPanel } from "@/components/billing/checkout-panel";
+import { listPaymentsForOrganization } from "@/lib/billing/activate";
 
 export const metadata = { title: "Billing — CONVORA" };
 
@@ -42,6 +44,7 @@ export default async function BillingSettingsPage() {
   const aiUsed = await getUsageQuantity(orgId, METER_KEYS.AI_GENERATIONS);
   const aiLimit =
     entitlements.int[ENTITLEMENT_KEYS.AI_MONTHLY_LIMIT] ?? null;
+  const payments = await listPaymentsForOrganization(orgId, 20);
 
   const trialEnds = pair?.subscription.trialEndsAt;
   const trialRemainingMs = trialEnds
@@ -147,10 +150,61 @@ export default async function BillingSettingsPage() {
           )}
         </div>
         <p className="mt-4 text-xs text-[#5c5c5c]">
-          Upgrade and payment collection will be available when the payment
-          provider integration is enabled. This page reflects server-side
-          subscription state only.
+          Checkout uses Paystack. Subscription activates only after server-side
+          verification of the transaction.
         </p>
+      </section>
+
+      <div className="mt-8">
+        <CheckoutPanel
+          organizationId={orgId}
+          starter={
+            starter
+              ? {
+                  code: starter.code,
+                  monthlyDisplay: formatNairaFromKobo(starter.monthlyAmountMinor),
+                  yearlyDisplay: formatNairaFromKobo(starter.yearlyAmountMinor),
+                  monthlyAmountMinor: starter.monthlyAmountMinor,
+                  yearlyAmountMinor: starter.yearlyAmountMinor,
+                }
+              : null
+          }
+          premium={
+            premium
+              ? {
+                  code: premium.code,
+                  monthlyDisplay: formatNairaFromKobo(premium.monthlyAmountMinor),
+                  yearlyDisplay: formatNairaFromKobo(premium.yearlyAmountMinor),
+                  monthlyAmountMinor: premium.monthlyAmountMinor,
+                  yearlyAmountMinor: premium.yearlyAmountMinor,
+                }
+              : null
+          }
+        />
+      </div>
+
+      <section className="mt-8 border border-[#e4e4e2] bg-white p-5">
+        <h2 className="text-sm font-medium">Payment history</h2>
+        {payments.length === 0 ? (
+          <p className="mt-2 text-sm text-[#5c5c5c]">No payments yet.</p>
+        ) : (
+          <ul className="mt-3 divide-y divide-[#e4e4e2] text-sm">
+            {payments.map((pay) => (
+              <li
+                key={pay.id}
+                className="flex flex-wrap justify-between gap-2 py-2"
+              >
+                <span>
+                  {pay.planCode} · {pay.billingInterval} · {pay.status}
+                </span>
+                <span>
+                  {formatNairaFromKobo(pay.amountMinor)} ·{" "}
+                  {pay.createdAt.toISOString().slice(0, 10)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </Container>
   );

@@ -31,6 +31,10 @@ export function setupTestEnv(): void {
     process.env.CHANNEL_SECRETS_KEY ??
     Buffer.alloc(32, 7).toString("base64");
   process.env.APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+  process.env.PAYSTACK_SECRET_KEY =
+    process.env.PAYSTACK_SECRET_KEY ?? "sk_test_convora_secret_key_for_tests";
+  process.env.PAYSTACK_PUBLIC_KEY =
+    process.env.PAYSTACK_PUBLIC_KEY ?? "pk_test_convora_public";
   if (!envReady) {
     resetServerEnvCache();
     resetDatabaseSingleton();
@@ -47,6 +51,7 @@ export async function truncateAllTables(): Promise<void> {
   const db = getTestDb();
   await db.execute(sql`
     TRUNCATE TABLE
+      payment_transactions,
       usage_meters,
       subscription_events,
       organization_subscriptions,

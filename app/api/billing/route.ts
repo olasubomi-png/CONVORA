@@ -6,6 +6,7 @@ import { ensureBillingCatalog, getPlanByCode } from "@/lib/billing/plans";
 import { getUsageQuantity } from "@/lib/billing/usage";
 import { METER_KEYS, ENTITLEMENT_KEYS } from "@/lib/billing/entitlement-keys";
 import { formatNairaFromKobo } from "@/lib/billing/money";
+import { listPaymentsForOrganization } from "@/lib/billing/activate";
 import { jsonError, jsonOk } from "@/lib/api/response";
 import { ValidationError, AuthorizationError } from "@/lib/errors";
 
@@ -87,9 +88,10 @@ export async function GET(request: Request) {
             }
           : null,
       },
+      payments: await listPaymentsForOrganization(organizationId, 30),
       paymentIntegration: {
-        ready: false,
-        note: "Checkout and payment verification are not enabled in this phase.",
+        ready: true,
+        note: "Paystack checkout requires PAYSTACK_SECRET_KEY.",
       },
     });
   } catch (error) {

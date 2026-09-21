@@ -221,10 +221,14 @@ export {
   planCodeEnum,
   billingIntervalEnum,
   subscriptionStatusEnum,
+  paymentTransactions,
+  paymentStatusEnum,
 } from "./billing";
 export type {
   BillingPlan,
   OrganizationSubscription,
   SubscriptionStatus,
   PlanCode,
+  PaymentTransaction,
+  PaymentStatus,
 } from "./billing";
