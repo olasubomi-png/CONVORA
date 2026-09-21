@@ -5,6 +5,16 @@ import {
   WHATSAPP_CLOUD_PROVIDER,
 } from "@/lib/channels/providers/whatsapp/adapter";
 import { loadWhatsAppCredentials } from "@/lib/channels/providers/whatsapp/installations";
+import {
+  FacebookMessengerAdapter,
+  FACEBOOK_MESSENGER_PROVIDER,
+} from "@/lib/channels/providers/facebook/adapter";
+import { loadFacebookCredentials } from "@/lib/channels/providers/facebook/installations";
+import {
+  InstagramMessagingAdapter,
+  INSTAGRAM_MESSAGING_PROVIDER,
+} from "@/lib/channels/providers/instagram/adapter";
+import { loadInstagramCredentials } from "@/lib/channels/providers/instagram/installations";
 import type { channelInstallations } from "@/db/schema";
 
 /**
@@ -20,6 +30,22 @@ export function resolveInstallationAdapter(
   ) {
     const credentials = loadWhatsAppCredentials(installation);
     return new WhatsAppCloudAdapter(credentials);
+  }
+
+  if (
+    installation.channel === "FACEBOOK" &&
+    installation.provider === FACEBOOK_MESSENGER_PROVIDER
+  ) {
+    const credentials = loadFacebookCredentials(installation);
+    return new FacebookMessengerAdapter(credentials);
+  }
+
+  if (
+    installation.channel === "INSTAGRAM" &&
+    installation.provider === INSTAGRAM_MESSAGING_PROVIDER
+  ) {
+    const credentials = loadInstagramCredentials(installation);
+    return new InstagramMessagingAdapter(credentials);
   }
 
   // Non-credentialed mock / registered adapters

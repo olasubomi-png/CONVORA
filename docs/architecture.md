@@ -225,3 +225,24 @@ preset/custom range, channel, status, priority, agent membership.
 
 Authorization: any active organization member. Tenant isolation is enforced by
 `organizationId` membership check plus SQL `organization_id` predicates.
+
+
+## Meta channels (Facebook Messenger + Instagram)
+
+Channels: `FACEBOOK` (provider `facebook_messenger`), `INSTAGRAM` (provider `instagram_messaging`).
+
+Architecture reuses the Phase 7 adapter contract and Phase 8 installation-scoped credentials:
+
+Meta webhook → installation lookup (page id / IG account id) → installation-scoped adapter
+→ `processInboundEvent` → customer identity + conversation + message → shared inbox
+
+Outbound: agent message → `deliverOutboundMessage` → `resolveInstallationAdapter` → Graph API.
+
+Customer identities are provider-scoped (`customer_channel_identities`); Facebook PSID and
+Instagram-scoped ID are never auto-merged by display name.
+
+Webhooks: `/api/webhooks/facebook`, `/api/webhooks/instagram` (X-Hub-Signature-256).
+
+Production Instagram messaging requires a professional account linked to a Page and may
+require Meta App Review. Tokens are AES-encrypted (`CHANNEL_SECRETS_KEY`); sanitized DTOs
+never include secrets.
