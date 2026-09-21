@@ -84,12 +84,13 @@ export async function consumeUsage(input: {
     RETURNING quantity
   `);
 
-  const rows = Array.isArray(result)
-    ? (result as Array<{ quantity: number }>)
-    : ((result as { rows?: Array<{ quantity: number }> }).rows ?? []);
+  const rows: Array<{ quantity?: unknown }> = Array.isArray(result)
+    ? (result as unknown as Array<{ quantity?: unknown }>)
+    : [];
 
-  if (rows[0]) {
-    return { allowed: true, quantity: Number(rows[0].quantity), limit };
+  const first = rows[0];
+  if (first && first.quantity !== undefined && first.quantity !== null) {
+    return { allowed: true, quantity: Number(first.quantity), limit };
   }
 
   const current = await getUsageQuantity(
