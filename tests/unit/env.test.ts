@@ -66,3 +66,63 @@ describe("parseServerEnv", () => {
     }
   });
 });
+
+import { validateProductionEnv } from "@/lib/env";
+
+describe("validateProductionEnv", () => {
+  it("requires CHANNEL_SECRETS_KEY in production", () => {
+    const issues = validateProductionEnv({
+      DATABASE_URL: "postgresql://u:p@h/db",
+      APP_URL: "https://app.example.com",
+      NODE_ENV: "production",
+      OPENAI_MODEL: "gpt-4o-mini",
+    });
+    expect(issues.some((i) => i.includes("CHANNEL_SECRETS_KEY"))).toBe(true);
+  });
+
+  it("accepts valid 32-byte base64 CHANNEL_SECRETS_KEY", () => {
+    const key = Buffer.alloc(32, 1).toString("base64");
+    const issues = validateProductionEnv({
+      DATABASE_URL: "postgresql://u:p@h/db",
+      APP_URL: "https://app.example.com",
+      NODE_ENV: "production",
+      OPENAI_MODEL: "gpt-4o-mini",
+      CHANNEL_SECRETS_KEY: key,
+    });
+    expect(issues).toEqual([]);
+  });
+
+  it("rejects wrong-length CHANNEL_SECRETS_KEY", () => {
+    const issues = validateProductionEnv({
+      DATABASE_URL: "postgresql://u:p@h/db",
+      APP_URL: "https://app.example.com",
+      NODE_ENV: "production",
+      OPENAI_MODEL: "gpt-4o-mini",
+      CHANNEL_SECRETS_KEY: Buffer.alloc(16).toString("base64"),
+    });
+    expect(issues.some((i) => i.includes("32 bytes"))).toBe(true);
+  });
+
+  it("requires PAYSTACK_SECRET_KEY when public key is set", () => {
+    const key = Buffer.alloc(32, 2).toString("base64");
+    const issues = validateProductionEnv({
+      DATABASE_URL: "postgresql://u:p@h/db",
+      APP_URL: "https://app.example.com",
+      NODE_ENV: "production",
+      OPENAI_MODEL: "gpt-4o-mini",
+      CHANNEL_SECRETS_KEY: key,
+      PAYSTACK_PUBLIC_KEY: "pk_live_x",
+    });
+    expect(issues.some((i) => i.includes("PAYSTACK_SECRET_KEY"))).toBe(true);
+  });
+
+  it("does not enforce production rules outside production", () => {
+    const issues = validateProductionEnv({
+      DATABASE_URL: "postgresql://u:p@h/db",
+      APP_URL: "http://localhost:3000",
+      NODE_ENV: "development",
+      OPENAI_MODEL: "gpt-4o-mini",
+    });
+    expect(issues).toEqual([]);
+  });
+});

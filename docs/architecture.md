@@ -255,3 +255,9 @@ Webhooks: `/api/webhooks/facebook`, `/api/webhooks/instagram` (X-Hub-Signature-2
 Production Instagram messaging requires a professional account linked to a Page and may
 require Meta App Review. Tokens are AES-encrypted (`CHANNEL_SECRETS_KEY`); sanitized DTOs
 never include secrets.
+
+
+## Production readiness
+
+See [production.md](./production.md) for environment classification, health endpoints,
+webhook URLs, Vercel vs VPS topology, migration procedure, and go-live checklist.

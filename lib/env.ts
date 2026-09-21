@@ -2,6 +2,21 @@ import { z } from "zod";
 
 const nodeEnvSchema = z.enum(["development", "test", "production"]);
 
+/**
+ * Server environment schema.
+ *
+ * Classification:
+ * - DATABASE_URL: required, server-only secret
+ * - APP_URL: required, public canonical origin (no trailing slash)
+ * - NODE_ENV: required
+ * - CHANNEL_SECRETS_KEY: required in production, server-only secret (base64 32-byte key)
+ * - PAYSTACK_SECRET_KEY: optional until payments enabled; server-only secret
+ * - PAYSTACK_PUBLIC_KEY: optional; client-safe when payments enabled
+ * - AI_PROVIDER / OPENAI_*: optional; OPENAI_API_KEY is server-only secret
+ *
+ * Channel provider tokens (WhatsApp, Meta) are stored encrypted per installation
+ * in the database — not as global env vars.
+ */
 const serverEnvSchema = z.object({
   DATABASE_URL: z
     .string()
@@ -20,23 +35,45 @@ const serverEnvSchema = z.object({
   AI_PROVIDER: z.enum(["openai", "mock"]).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
   OPENAI_MODEL: z.string().min(1).default("gpt-4o-mini"),
-  /** Base64-encoded 32-byte AES key for channel credential encryption. */
+  /**
+   * Base64-encoded 32-byte AES key for channel credential encryption.
+   * Required in production. Never log or return this value.
+   */
   CHANNEL_SECRETS_KEY: z.string().min(1).optional(),
-  /** Paystack secret key (server-only). Required in production when payments enabled. */
+  /** Paystack secret key (server-only). Required when accepting payments in production. */
   PAYSTACK_SECRET_KEY: z.string().min(1).optional(),
-  /** Paystack public key (safe for client checkout). */
+  /** Paystack public key (safe for client checkout widgets). */
   PAYSTACK_PUBLIC_KEY: z.string().min(1).optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
 
-export type EnvParseResult =
-  | { success: true; data: ServerEnv }
-  | { success: false; error: z.ZodError };
+export type EnvSource = {
+  DATABASE_URL?: string;
+  APP_URL?: string;
+  NODE_ENV?: string;
+  AI_PROVIDER?: string;
+  OPENAI_API_KEY?: string;
+  OPENAI_MODEL?: string;
+  CHANNEL_SECRETS_KEY?: string;
+  PAYSTACK_SECRET_KEY?: string;
+  PAYSTACK_PUBLIC_KEY?: string;
+};
+
+function isValidChannelSecretsKey(value: string): boolean {
+  try {
+    const buf = Buffer.from(value, "base64");
+    return buf.length === 32;
+  } catch {
+    return false;
+  }
+}
 
 export function parseServerEnv(
-  source: Record<string, string | undefined>,
-): EnvParseResult {
+  source: EnvSource,
+):
+  | { success: true; data: ServerEnv }
+  | { success: false; error: z.ZodError } {
   const result = serverEnvSchema.safeParse({
     DATABASE_URL: source.DATABASE_URL,
     APP_URL: source.APP_URL,
@@ -60,6 +97,44 @@ export function formatEnvIssues(error: z.ZodError): string {
   return error.issues
     .map((issue) => `${issue.path.join(".") || "env"}: ${issue.message}`)
     .join("; ");
+}
+
+/**
+ * Production-only invariants beyond Zod schema shape.
+ * Never includes secret values in messages.
+ */
+export function validateProductionEnv(env: ServerEnv): string[] {
+  const issues: string[] = [];
+
+  if (env.NODE_ENV !== "production") {
+    return issues;
+  }
+
+  if (!env.CHANNEL_SECRETS_KEY) {
+    issues.push("CHANNEL_SECRETS_KEY is required in production");
+  } else if (!isValidChannelSecretsKey(env.CHANNEL_SECRETS_KEY)) {
+    issues.push(
+      "CHANNEL_SECRETS_KEY must be base64 encoding of exactly 32 bytes",
+    );
+  }
+
+  if (env.PAYSTACK_PUBLIC_KEY && !env.PAYSTACK_SECRET_KEY) {
+    issues.push(
+      "PAYSTACK_SECRET_KEY is required when PAYSTACK_PUBLIC_KEY is set in production",
+    );
+  }
+
+  if (env.AI_PROVIDER === "openai" && !env.OPENAI_API_KEY) {
+    issues.push("OPENAI_API_KEY is required when AI_PROVIDER=openai");
+  }
+
+  if (env.APP_URL.startsWith("http://") && !env.APP_URL.includes("localhost")) {
+    issues.push(
+      "APP_URL should use https:// in production (except explicit local tunnel testing)",
+    );
+  }
+
+  return issues;
 }
 
 let cachedEnv: ServerEnv | undefined;
@@ -87,22 +162,10 @@ export function getServerEnv(): ServerEnv {
     );
   }
 
-  if (
-    parsed.data.NODE_ENV === "production" &&
-    !parsed.data.CHANNEL_SECRETS_KEY
-  ) {
+  const productionIssues = validateProductionEnv(parsed.data);
+  if (productionIssues.length > 0) {
     throw new Error(
-      "Invalid environment configuration: CHANNEL_SECRETS_KEY is required in production",
-    );
-  }
-
-  if (
-    parsed.data.NODE_ENV === "production" &&
-    parsed.data.PAYSTACK_PUBLIC_KEY &&
-    !parsed.data.PAYSTACK_SECRET_KEY
-  ) {
-    throw new Error(
-      "Invalid environment configuration: PAYSTACK_SECRET_KEY is required when PAYSTACK_PUBLIC_KEY is set in production",
+      `Invalid environment configuration: ${productionIssues.join("; ")}`,
     );
   }
 
@@ -112,4 +175,23 @@ export function getServerEnv(): ServerEnv {
 
 export function resetServerEnvCache(): void {
   cachedEnv = undefined;
+}
+
+/** Public, non-secret subset safe to include in health/status responses. */
+export function getPublicRuntimeInfo(): {
+  nodeEnv: string;
+  appUrlConfigured: boolean;
+} {
+  try {
+    const env = getServerEnv();
+    return {
+      nodeEnv: env.NODE_ENV,
+      appUrlConfigured: Boolean(env.APP_URL),
+    };
+  } catch {
+    return {
+      nodeEnv: process.env.NODE_ENV ?? "unknown",
+      appUrlConfigured: Boolean(process.env.APP_URL),
+    };
+  }
 }
