@@ -6,7 +6,12 @@ import * as schema from "@/db/schema";
 export type Database = ReturnType<typeof createDatabase>;
 
 function createDatabase(connectionString: string) {
-  const client = postgres(connectionString, { max: 5, prepare: false });
+  const client = postgres(connectionString, {
+    max: 1,
+    prepare: false,
+    idle_timeout: 20,
+    connect_timeout: 15,
+  });
   return drizzle(client, { schema });
 }
 

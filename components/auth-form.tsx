@@ -1,30 +1,71 @@
 "use client";
-import { useState, useTransition } from "react";
+
+import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { ActionResult } from "@/app/actions/auth";
 
 type AuthFormProps = {
   mode: "register" | "login";
-  action: (formData: FormData) => Promise<{ ok: true } | { ok: false; error: string }>;
+  action: (formData: FormData) => Promise<ActionResult>;
 };
 
 export function AuthForm({ mode, action }: AuthFormProps) {
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-  function onSubmit(formData: FormData) {
-    setError(null);
-    startTransition(async () => {
-      const result = await action(formData);
-      if (!result.ok) setError(result.error);
-    });
-  }
+  const [state, formAction, pending] = useActionState(
+    async (
+      _prev: ActionResult | null,
+      formData: FormData,
+    ): Promise<ActionResult | null> => {
+      return action(formData);
+    },
+    null,
+  );
+
   return (
-    <form action={onSubmit} className="space-y-5">
-      {mode === "register" ? <Input name="fullName" label="Full name" autoComplete="name" required disabled={pending} /> : null}
-      <Input name="email" type="email" label="Email" autoComplete="email" required disabled={pending} />
-      <Input name="password" type="password" label="Password" autoComplete={mode === "register" ? "new-password" : "current-password"} required disabled={pending} minLength={mode === "register" ? 10 : undefined} />
-      {error ? <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{error}</p> : null}
-      <Button type="submit" disabled={pending} className="w-full">{pending ? "Please wait…" : mode === "register" ? "Create account" : "Sign in"}</Button>
+    <form action={formAction} className="space-y-5">
+      {mode === "register" ? (
+        <Input
+          name="fullName"
+          label="Full name"
+          autoComplete="name"
+          required
+          disabled={pending}
+        />
+      ) : null}
+      <Input
+        name="email"
+        type="email"
+        label="Email"
+        autoComplete="email"
+        required
+        disabled={pending}
+      />
+      <Input
+        name="password"
+        type="password"
+        label="Password"
+        autoComplete={
+          mode === "register" ? "new-password" : "current-password"
+        }
+        required
+        disabled={pending}
+        minLength={mode === "register" ? 10 : undefined}
+      />
+      {state && !state.ok ? (
+        <p
+          className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+          role="alert"
+        >
+          {state.error}
+        </p>
+      ) : null}
+      <Button type="submit" disabled={pending} className="w-full">
+        {pending
+          ? "Please wait…"
+          : mode === "register"
+            ? "Create account"
+            : "Sign in"}
+      </Button>
     </form>
   );
 }

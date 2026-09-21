@@ -1,46 +1,66 @@
+import Link from "next/link";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Container } from "@/components/ui/container";
 
-const capabilities = [
+const valueProps = [
   {
-    title: "Shared inbox",
-    body: "One working surface for conversations that arrive from different channels.",
+    title: "Unified inbox",
+    body: "Every conversation from Web Chat, WhatsApp, Facebook Messenger, and Instagram lands in one agent workspace scoped to your organization.",
   },
   {
-    title: "Organization isolation",
-    body: "Every operational record belongs to an organization. Access is decided on the server.",
+    title: "Multi-channel without chaos",
+    body: "Provider adapters normalize inbound and outbound messages into a single conversation model—agents work threads, not channel silos.",
   },
   {
-    title: "Channel adapters",
-    body: "Provider-specific integrations stay outside the conversation domain.",
+    title: "AI as a copilot",
+    body: "Summaries, suggested replies, and context assistance stay human-approved. Agents remain in control of what customers see.",
   },
   {
-    title: "Assignment",
-    body: "Conversations can be owned by agents without binding the core model to a single network.",
+    title: "Automation that stays safe",
+    body: "Deterministic rules react to conversation and customer events—assignment, tags, priority, notes—without autonomous customer messaging.",
   },
   {
-    title: "Customer context",
-    body: "People an organization serves are first-class, independent of the channel they used.",
+    title: "Customer intelligence",
+    body: "Organization-owned customer records, attributes, tags, notes, and activity timelines that survive agent turnover.",
   },
   {
-    title: "Operational discipline",
-    body: "Validation, typed errors, and audit-ready boundaries are part of the foundation.",
+    title: "Security by design",
+    body: "Multi-tenant isolation, role-based access, encrypted channel credentials, signed webhooks, and audit trails are enforced server-side.",
   },
 ];
 
-const steps = [
+const channels = [
+  "Web Chat",
+  "WhatsApp",
+  "Facebook Messenger",
+  "Instagram Messaging",
+];
+
+const plans = [
   {
-    title: "Connect a channel",
-    body: "An adapter receives provider events and maps them into CONVORA conversation events.",
+    name: "Starter",
+    price: "₦6,799",
+    period: "/ month",
+    yearly: "₦65,270 / year",
+    items: [
+      "Web Chat & Facebook Messenger",
+      "AI with a monthly allowance",
+      "Customers & conversations",
+      "Shared inbox",
+    ],
   },
   {
-    title: "Normalize the thread",
-    body: "The conversation engine stores customers, conversations, and messages in one model.",
-  },
-  {
-    title: "Work the inbox",
-    body: "Agents respond from a shared workspace scoped to their organization.",
+    name: "Premium",
+    price: "₦15,999",
+    period: "/ month",
+    yearly: "₦153,590 / year",
+    items: [
+      "WhatsApp & Instagram included",
+      "Higher AI allowance",
+      "Automations",
+      "Advanced analytics",
+    ],
   },
 ];
 
@@ -53,151 +73,215 @@ export default function HomePage() {
           <Container className="grid gap-12 py-20 md:grid-cols-12 md:py-28">
             <div className="md:col-span-7">
               <p className="text-sm tracking-[0.16em] text-[#5c5c5c]">
-                COMMUNICATION INFRASTRUCTURE
+                MULTI-CHANNEL CUSTOMER COMMUNICATION
               </p>
               <h1 className="mt-4 max-w-3xl text-4xl leading-tight tracking-tight md:text-5xl">
-                The communication layer between organizations and the people they serve.
+                One inbox for every customer conversation.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-7 text-[#3f3f3f]">
-                CONVORA is being built as production software for teams that need one
-                operational system for conversations—not a collection of disconnected inboxes.
+                CONVORA is the communication layer between organizations and the
+                people they serve—Web Chat, WhatsApp, Facebook Messenger, and
+                Instagram in a single secure workspace for your team.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <a
-                  href="#contact"
+                <Link
+                  href="/register"
                   className="inline-flex items-center bg-[#1f4e3d] px-4 py-2.5 text-sm text-white hover:bg-[#173b2e]"
                 >
-                  Request access
-                </a>
-                <a
-                  href="#product"
+                  Start free trial
+                </Link>
+                <Link
+                  href="/login"
                   className="inline-flex items-center border border-[#141414] px-4 py-2.5 text-sm text-[#141414] hover:bg-[#f3f3f1]"
                 >
-                  Read the product brief
-                </a>
+                  Sign in
+                </Link>
               </div>
+              <p className="mt-4 text-sm text-[#5c5c5c]">
+                7-day Premium-level trial. No payment required to start.
+              </p>
             </div>
             <aside className="border border-[#e4e4e2] bg-[#f8f8f7] p-6 md:col-span-5">
               <h2 className="text-sm font-medium tracking-[0.12em] text-[#5c5c5c]">
-                CURRENT STATUS
+                CHANNELS
               </h2>
-              <p className="mt-3 text-2xl">Phase 0</p>
-              <p className="mt-3 text-sm leading-6 text-[#3f3f3f]">
-                Engineering foundation only. Authentication, channels, conversations, and
-                billing are not available yet.
+              <ul className="mt-4 space-y-3 text-sm">
+                {channels.map((c) => (
+                  <li
+                    key={c}
+                    className="flex items-center justify-between border-t border-[#e4e4e2] pt-3 first:border-t-0 first:pt-0"
+                  >
+                    <span>{c}</span>
+                    <span className="text-[#1f4e3d]">Supported</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-6 text-xs leading-5 text-[#5c5c5c]">
+                All channels feed the same conversation engine and shared agent
+                inbox—tenant-isolated per organization.
               </p>
-              <dl className="mt-6 space-y-3 text-sm">
-                <div className="flex justify-between border-t border-[#e4e4e2] pt-3">
-                  <dt className="text-[#5c5c5c]">Application</dt>
-                  <dd>Next.js App Router</dd>
-                </div>
-                <div className="flex justify-between border-t border-[#e4e4e2] pt-3">
-                  <dt className="text-[#5c5c5c]">Data layer</dt>
-                  <dd>Drizzle / PostgreSQL</dd>
-                </div>
-                <div className="flex justify-between border-t border-[#e4e4e2] pt-3">
-                  <dt className="text-[#5c5c5c]">Tenancy</dt>
-                  <dd>Documented, not implemented</dd>
-                </div>
-              </dl>
             </aside>
           </Container>
         </section>
 
-        <section id="product" className="border-b border-[#e4e4e2]">
-          <Container className="grid gap-10 py-20 md:grid-cols-12">
-            <div className="md:col-span-4">
-              <h2 className="text-3xl tracking-tight">What CONVORA is</h2>
-            </div>
-            <div className="space-y-5 text-base leading-7 text-[#3f3f3f] md:col-span-8">
-              <p>
-                Organizations already speak with customers across WhatsApp, email, social
-                networks, websites, and SMS. Those conversations usually live in the tools
-                that delivered them.
-              </p>
-              <p>
-                CONVORA treats the conversation as the system of record. Channels become
-                adapters. Agents work from one inbox. The organization remains the security
-                boundary.
-              </p>
-              <p>
-                This page describes the product direction. It does not present unfinished
-                software as a working dashboard.
-              </p>
-            </div>
-          </Container>
-        </section>
-
-        <section id="capabilities" className="border-b border-[#e4e4e2] bg-white">
-          <Container className="py-20">
-            <h2 className="text-3xl tracking-tight">Core capabilities</h2>
-            <p className="mt-3 max-w-2xl text-[#3f3f3f]">
-              Planned product surfaces. None of these are live in Phase 0.
+        <section id="product" className="border-b border-[#e4e4e2] bg-[#f8f8f7]">
+          <Container className="py-16 md:py-20">
+            <p className="text-sm tracking-[0.16em] text-[#5c5c5c]">PRODUCT</p>
+            <h2 className="mt-3 max-w-2xl text-3xl tracking-tight">
+              Built for teams that outgrow fragmented inboxes.
+            </h2>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-[#3f3f3f]">
+              CONVORA keeps customers, conversations, agents, and audit history
+              inside your organization—so when channels multiply, your
+              operations stay coherent.
             </p>
-            <ul className="mt-12 grid gap-px bg-[#e4e4e2] sm:grid-cols-2 lg:grid-cols-3">
-              {capabilities.map((item) => (
-                <li key={item.title} className="bg-white p-6">
-                  <h3 className="text-lg">{item.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-[#3f3f3f]">{item.body}</p>
-                </li>
+            <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {valueProps.map((item) => (
+                <article
+                  key={item.title}
+                  className="border border-[#e4e4e2] bg-white p-5"
+                >
+                  <h3 className="text-base font-medium">{item.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-[#3f3f3f]">
+                    {item.body}
+                  </p>
+                </article>
               ))}
-            </ul>
+            </div>
           </Container>
         </section>
 
-        <section id="how-it-works" className="border-b border-[#e4e4e2]">
-          <Container className="py-20">
-            <h2 className="text-3xl tracking-tight">How it works</h2>
-            <ol className="mt-12 grid gap-8 md:grid-cols-3">
-              {steps.map((step, index) => (
-                <li key={step.title}>
-                  <p className="font-mono text-sm text-[#5c5c5c]">0{index + 1}</p>
-                  <h3 className="mt-3 text-xl">{step.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-[#3f3f3f]">{step.body}</p>
+        <section id="how-it-works" className="border-b border-[#e4e4e2] bg-white">
+          <Container className="py-16 md:py-20">
+            <p className="text-sm tracking-[0.16em] text-[#5c5c5c]">
+              HOW IT WORKS
+            </p>
+            <h2 className="mt-3 text-3xl tracking-tight">
+              From channel event to agent reply.
+            </h2>
+            <ol className="mt-10 grid gap-6 md:grid-cols-3">
+              {[
+                {
+                  step: "01",
+                  title: "Connect channels",
+                  body: "Install Web Chat on your site or connect WhatsApp, Facebook, and Instagram with encrypted credentials.",
+                },
+                {
+                  step: "02",
+                  title: "Conversations normalize",
+                  body: "Inbound messages resolve to organization-owned customers and threads in the shared conversation engine.",
+                },
+                {
+                  step: "03",
+                  title: "Team works the inbox",
+                  body: "Agents assign, reply, tag, automate, and use AI suggestions—with analytics on what actually happened.",
+                },
+              ].map((s) => (
+                <li key={s.step} className="border border-[#e4e4e2] p-5">
+                  <p className="text-xs tracking-[0.14em] text-[#5c5c5c]">
+                    {s.step}
+                  </p>
+                  <h3 className="mt-2 text-base font-medium">{s.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-[#3f3f3f]">
+                    {s.body}
+                  </p>
                 </li>
               ))}
             </ol>
           </Container>
         </section>
 
-        <section id="security" className="border-b border-[#e4e4e2] bg-white">
-          <Container className="grid gap-10 py-20 md:grid-cols-12">
-            <div className="md:col-span-4">
-              <h2 className="text-3xl tracking-tight">Security and tenancy</h2>
-            </div>
-            <div className="space-y-5 text-base leading-7 text-[#3f3f3f] md:col-span-8">
-              <p>
-                CONVORA will be multi-tenant. Organization-owned data is never selected by
-                trusting an identifier sent from the browser.
-              </p>
-              <p>
-                The intended control flow is request, authenticated user, organization
-                membership, then authorized resource. Channel credentials, customer records,
-                and conversation history stay inside that boundary.
-              </p>
-              <p>
-                Principles for authorization, secret handling, sessions, CSRF, rate limits,
-                audit logging, and safe errors are documented in the repository. They are
-                constraints for later phases, not claims about a finished control plane.
-              </p>
+        <section id="security" className="border-b border-[#e4e4e2] bg-[#f8f8f7]">
+          <Container className="py-16 md:py-20">
+            <p className="text-sm tracking-[0.16em] text-[#5c5c5c]">SECURITY</p>
+            <h2 className="mt-3 max-w-2xl text-3xl tracking-tight">
+              Multi-tenant isolation is not optional.
+            </h2>
+            <ul className="mt-8 grid gap-4 text-sm leading-6 text-[#3f3f3f] md:grid-cols-2">
+              <li className="border border-[#e4e4e2] bg-white p-4">
+                Organization-scoped data with server-side authorization and
+                role-based access (Owner, Admin, Agent).
+              </li>
+              <li className="border border-[#e4e4e2] bg-white p-4">
+                Channel credentials encrypted at rest; webhooks verified with
+                provider signatures.
+              </li>
+              <li className="border border-[#e4e4e2] bg-white p-4">
+                Opaque server-side sessions, HTTP-only cookies, and audit events
+                for sensitive operations.
+              </li>
+              <li className="border border-[#e4e4e2] bg-white p-4">
+                Billing entitlements enforced on the server—never client-side
+                plan checks.
+              </li>
+            </ul>
+          </Container>
+        </section>
+
+        <section id="pricing" className="border-b border-[#e4e4e2] bg-white">
+          <Container className="py-16 md:py-20">
+            <p className="text-sm tracking-[0.16em] text-[#5c5c5c]">PRICING</p>
+            <h2 className="mt-3 text-3xl tracking-tight">
+              Simple plans. Real entitlements.
+            </h2>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-[#5c5c5c]">
+              Start with a 7-day trial at Premium-level access. Yearly billing
+              includes a 20% discount.
+            </p>
+            <div className="mt-10 grid gap-6 md:grid-cols-2">
+              {plans.map((plan) => (
+                <article
+                  key={plan.name}
+                  className="flex flex-col border border-[#e4e4e2] p-6"
+                >
+                  <h3 className="text-lg font-medium">{plan.name}</h3>
+                  <p className="mt-3 text-3xl tracking-tight">
+                    {plan.price}
+                    <span className="text-base text-[#5c5c5c]">
+                      {plan.period}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-sm text-[#5c5c5c]">{plan.yearly}</p>
+                  <ul className="mt-6 flex-1 space-y-2 text-sm text-[#3f3f3f]">
+                    {plan.items.map((item) => (
+                      <li key={item}>· {item}</li>
+                    ))}
+                  </ul>
+                  <Link
+                    href="/register"
+                    className="mt-8 inline-flex items-center justify-center bg-[#1a1a1a] px-4 py-2.5 text-sm text-white hover:bg-[#2a2a2a]"
+                  >
+                    Get started
+                  </Link>
+                </article>
+              ))}
             </div>
           </Container>
         </section>
 
-        <section id="contact" className="bg-[#141414] text-white">
-          <Container className="py-20">
-            <h2 className="text-3xl tracking-tight">Start with the foundation</h2>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-[#c8c8c8]">
-              CONVORA is in Phase 0. There is no public signup. If you are building with
-              this repository, use the development documentation to run the application
-              locally.
+        <section className="bg-[#1f4e3d]">
+          <Container className="py-16 text-center md:py-20">
+            <h2 className="text-3xl tracking-tight text-white">
+              Put every customer conversation in one place.
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-white/80">
+              Create an organization, invite your team, connect a channel, and
+              start working from a shared inbox.
             </p>
-            <a
-              href="https://github.com/olasubomi-png/CONVORA"
-              className="mt-8 inline-flex items-center border border-white px-4 py-2.5 text-sm hover:bg-white hover:text-[#141414]"
-            >
-              View the repository
-            </a>
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              <Link
+                href="/register"
+                className="inline-flex items-center bg-white px-4 py-2.5 text-sm text-[#1f4e3d] hover:bg-[#f3f3f1]"
+              >
+                Start free trial
+              </Link>
+              <Link
+                href="/login"
+                className="inline-flex items-center border border-white/40 px-4 py-2.5 text-sm text-white hover:bg-white/10"
+              >
+                Sign in
+              </Link>
+            </div>
           </Container>
         </section>
       </main>
