@@ -10,11 +10,10 @@ import {
   organizationSubscriptions,
   subscriptionEvents,
 } from "@/db/schema";
-
-const TRIAL_DAYS = 14;
+import { TRIAL_DURATION_DAYS, TRIAL_DURATION_MS } from "@/lib/billing/constants";
 
 /**
- * Create an organization, OWNER membership, and 14-day Premium trial
+ * Create an organization, OWNER membership, and 7-day Premium trial
  * in one transaction. Unique slug + unique org subscription guard duplicates.
  */
 export async function createOrganizationWithOwner(
@@ -67,9 +66,7 @@ export async function createOrganizationWithOwner(
       }
 
       const now = new Date();
-      const trialEnds = new Date(
-        now.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000,
-      );
+      const trialEnds = new Date(now.getTime() + TRIAL_DURATION_MS);
 
       const [sub] = await tx
         .insert(organizationSubscriptions)
@@ -93,7 +90,7 @@ export async function createOrganizationWithOwner(
         eventType: "TRIAL_STARTED",
         toStatus: "TRIALING",
         actorUserId: userId,
-        payload: { trialDays: TRIAL_DAYS, planCode: "PREMIUM" },
+        payload: { trialDays: TRIAL_DURATION_DAYS, planCode: "PREMIUM" },
       });
 
       return { organizationId: org.id, membershipId: membership.id };

@@ -14,6 +14,7 @@ import { getOrganizationSubscription } from "@/lib/billing/subscriptions";
 import { consumeUsage } from "@/lib/billing/usage";
 import { ENTITLEMENT_KEYS, METER_KEYS } from "@/lib/billing/entitlement-keys";
 import { AI_LIMIT_STARTER, AI_LIMIT_PREMIUM } from "@/lib/billing/plans";
+import { TRIAL_DURATION_DAYS, TRIAL_DURATION_MS } from "@/lib/billing/constants";
 import { getTestDb, setupTestEnv, truncateAllTables } from "../helpers/db";
 
 beforeAll(() => {
@@ -36,7 +37,7 @@ async function seedUser(email: string) {
 }
 
 describe("organization trial", () => {
-  it("creates exactly one 14-day Premium trial", async () => {
+  it("creates exactly one 7-day Premium trial", async () => {
     const owner = await seedUser("bill-t@example.com");
     const org = await createOrganizationWithOwner(owner.id, {
       name: "Trial Co",
@@ -50,7 +51,10 @@ describe("organization trial", () => {
     const days =
       (sub!.trialEndsAt!.getTime() - sub!.trialStartsAt!.getTime()) /
       (24 * 60 * 60 * 1000);
-    expect(days).toBeCloseTo(14, 0);
+    expect(days).toBeCloseTo(TRIAL_DURATION_DAYS, 0);
+    expect(sub!.trialEndsAt!.getTime() - sub!.trialStartsAt!.getTime()).toBe(
+      TRIAL_DURATION_MS,
+    );
 
     const ent = await getEffectiveEntitlements(org.organizationId);
     expect(ent.entitled).toBe(true);
@@ -62,6 +66,37 @@ describe("organization trial", () => {
       await hasEntitlement(org.organizationId, ENTITLEMENT_KEYS.AUTOMATION_ENABLED),
     ).toBe(true);
   });
+
+  it("trial is active before expiration and inactive after", async () => {
+    const owner = await seedUser("bill-7d@example.com");
+    const org = await createOrganizationWithOwner(owner.id, {
+      name: "Seven",
+      slug: "bill-7d",
+    });
+    const sub = await getOrganizationSubscription(org.organizationId);
+    expect(sub!.status).toBe("TRIALING");
+    expect(
+      await hasEntitlement(org.organizationId, ENTITLEMENT_KEYS.CHANNEL_WHATSAPP),
+    ).toBe(true);
+
+    // Simulate end of 7-day window
+    await getTestDb()
+      .update(organizationSubscriptions)
+      .set({
+        trialEndsAt: new Date(Date.now() - 1),
+        updatedAt: new Date(),
+      })
+      .where(
+        eq(organizationSubscriptions.organizationId, org.organizationId),
+      );
+
+    const after = await getOrganizationSubscription(org.organizationId);
+    expect(after!.status).toBe("EXPIRED");
+    expect(
+      await hasEntitlement(org.organizationId, ENTITLEMENT_KEYS.CHANNEL_WHATSAPP),
+    ).toBe(false);
+  });
+
 
   it("prevents duplicate subscription rows", async () => {
     const owner = await seedUser("bill-dup@example.com");

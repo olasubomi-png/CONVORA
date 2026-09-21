@@ -8,8 +8,7 @@ import {
 import { getPlanByCode } from "@/lib/billing/plans";
 import { ConflictError } from "@/lib/errors";
 import { isUniqueViolation } from "@/lib/db-errors";
-
-const TRIAL_DAYS = 14;
+import { TRIAL_DURATION_DAYS, TRIAL_DURATION_MS } from "@/lib/billing/constants";
 
 type Tx = Parameters<Parameters<ReturnType<typeof getDatabase>["transaction"]>[0]>[0];
 
@@ -28,7 +27,7 @@ export async function createTrialSubscription(
   }
 
   const now = new Date();
-  const trialEnds = new Date(now.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  const trialEnds = new Date(now.getTime() + TRIAL_DURATION_MS);
 
   try {
     const [sub] = await db
@@ -53,7 +52,7 @@ export async function createTrialSubscription(
       fromStatus: null,
       toStatus: "TRIALING",
       payload: {
-        trialDays: TRIAL_DAYS,
+        trialDays: TRIAL_DURATION_DAYS,
         planCode: "PREMIUM",
       },
     });
