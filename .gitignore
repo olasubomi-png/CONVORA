@@ -45,3 +45,8 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# Drizzle Kit introspect/pull artifacts (not used by the app; schema is db/schema/)
+db/migrations/schema.ts
+db/migrations/relations.ts
+db/migrations/meta/_journal.json.bak

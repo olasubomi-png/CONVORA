@@ -208,3 +208,12 @@ psql "$DATABASE_URL" -c "\dt"
 2. Enable Web Chat; send a visitor message; confirm inbox + reply path.
 3. (If configured) WhatsApp/Meta test message through webhooks.
 4. Confirm no secrets appear in browser network responses or client bundles.
+
+## TypeScript scope
+
+Application types come from `db/schema/`. SQL migrations live in `db/migrations/*.sql`.
+
+Do **not** commit or typecheck Drizzle Kit introspect outputs such as `db/migrations/relations.ts` or `db/migrations/schema.ts`. Those files auto-generate duplicate relation keys for composite tenant foreign keys (e.g. multiple membership FKs on `conversation_assignment_history`) and are not imported by the application.
+
+`tsconfig.json` excludes `db/migrations` from compilation. If a local `relations.ts` appears after `drizzle-kit pull`/`introspect`, delete it or leave it ignored.
+
