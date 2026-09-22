@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import { verifyPlatformMetaSignature } from "@/lib/channels/meta/webhook-signature";
 import { verifyMetaWebhookChallenge } from "@/lib/channels/meta/webhook-verify";
 import { getDatabase } from "@/db";
 import { channelInstallations } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { processInboundEvent } from "@/lib/channels/inbound";
 import {
   WhatsAppCloudAdapter,
@@ -83,6 +84,14 @@ export async function POST(request: Request) {
     const rawBody = await request.text();
     if (rawBody.length > 512_000) {
       return new NextResponse("Payload too large", { status: 413 });
+    }
+
+    const platformSig = verifyPlatformMetaSignature(
+      rawBody,
+      request.headers.get("x-hub-signature-256"),
+    );
+    if (platformSig.required && !platformSig.ok) {
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
     let phoneNumberId: string | null = null;

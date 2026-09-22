@@ -372,3 +372,18 @@ Webhook URLs (register in Meta app):
 - `{APP_URL}/api/webhooks/facebook`
 - `{APP_URL}/api/webhooks/instagram`
 - OAuth callback: `{APP_URL}/api/channels/meta/oauth/callback`
+
+### Instagram messaging (Messenger API for Instagram)
+
+CONVORA uses Meta's **Messenger API for Instagram**:
+
+- Agent authorizes eligible Instagram **professional/business** accounts linked to a Facebook Page.
+- Webhook subscription is performed on the **linked Facebook Page** (`/{page-id}/subscribed_apps`). Instagram DMs are delivered on the app webhook with `object: "instagram"`.
+- Inbound tenant resolution uses the **Instagram professional account id** (`entry.id` / `providerResourceId`).
+- Outbound send path is `POST /{instagram-user-id}/messages` with the **Page access token** — never the Facebook Page id as the Graph path.
+
+Personal Instagram accounts are not supported.
+
+### WhatsApp
+
+CONNECTED only when a `phone_number_id` is discovered after authorization. Otherwise the UI shows **Needs action** (no fake active installation).

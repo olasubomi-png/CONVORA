@@ -140,9 +140,16 @@ async function listPages(userToken: string): Promise<PageAccount[]> {
 }
 
 /**
- * Subscribe a Facebook Page to Messenger webhook fields required by CONVORA.
- * Uses the Page access token. Failure means messages will not arrive until
- * the Meta app + page subscription is corrected (NEEDS_ACTION).
+ * Subscribe a Facebook Page to messaging webhook fields.
+ *
+ * Meta Messenger API for Instagram delivers Instagram DMs through the linked
+ * Facebook Page's subscribed_apps (messages field). There is no separate
+ * Instagram-only Graph "subscribed_apps" path for this integration model.
+ *
+ * Outbound Instagram messages still use POST /{instagram-user-id}/messages
+ * (see InstagramMessagingAdapter) — never the Facebook Page ID as the send path.
+ *
+ * Uses the Page access token. Failure → NEEDS_ACTION / ERROR, not fake CONNECTED.
  */
 export async function subscribePageToMessengerWebhooks(input: {
   pageId: string;

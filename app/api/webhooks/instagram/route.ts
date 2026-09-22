@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { verifyPlatformMetaSignature } from "@/lib/channels/meta/webhook-signature";
 import { eq } from "drizzle-orm";
 import { getDatabase } from "@/db";
 import { channelInstallations } from "@/db/schema";
@@ -78,6 +79,14 @@ export async function POST(request: Request) {
     const rawBody = await request.text();
     if (rawBody.length > 512_000) {
       return new NextResponse("Payload too large", { status: 413 });
+    }
+
+    const platformSig = verifyPlatformMetaSignature(
+      rawBody,
+      request.headers.get("x-hub-signature-256"),
+    );
+    if (platformSig.required && !platformSig.ok) {
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
     let accountId: string | null = null;

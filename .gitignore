@@ -50,3 +50,5 @@ yarn-error.log*
 db/migrations/schema.ts
 db/migrations/relations.ts
 db/migrations/meta/_journal.json.bak
+test-full.out
+test-full.out
