@@ -11,6 +11,7 @@ permissions:
   contents: read
   checks: write
   statuses: write
+  actions: write
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -78,4 +79,29 @@ jobs:
       - name: Production build
         run: npm run build
         env:
+          NODE_ENV: production
           DATABASE_URL: postgresql://convora:convora@localhost:5432/convora_test
+
+      - name: Package standalone artifact
+        run: |
+          set -euo pipefail
+          test -f .next/standalone/server.js
+          mkdir -p dist/standalone
+          cp -a .next/standalone/. dist/standalone/
+          mkdir -p dist/standalone/.next/static
+          cp -a .next/static/. dist/standalone/.next/static/
+          if [ -d public ]; then
+            mkdir -p dist/standalone/public
+            cp -a public/. dist/standalone/public/
+          fi
+          tar -C dist -czf convora-standalone.tgz standalone
+          ls -la convora-standalone.tgz
+          tar -tzf convora-standalone.tgz | head -40
+
+      - name: Upload standalone artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: convora-standalone
+          path: convora-standalone.tgz
+          if-no-files-found: error
+          retention-days: 14

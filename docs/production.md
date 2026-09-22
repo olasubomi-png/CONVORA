@@ -270,6 +270,22 @@ npm ci --omit=dev
 
 and ensure `NODE_PATH` / working directory still runs the standalone server from the package root layout documented below.
 
+
+
+### CI standalone artifact
+
+On successful `main` CI runs, GitHub Actions uploads **`convora-standalone`** (`convora-standalone.tgz`).
+
+Download from the workflow run → Artifacts, then on the VPS:
+
+```bash
+tar -xzf convora-standalone.tgz
+# extracts ./standalone/ with server.js, .next/static, public/
+rsync -a standalone/ /var/www/CONVORA/run/
+```
+
+Do not run `next build` on low-memory VPS hosts.
+
 ### 3. Deploy to the VPS
 
 Example paths assume app root `/var/www/CONVORA`:
