@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { verifyMetaWebhookChallenge } from "@/lib/channels/meta/webhook-verify";
 import { getDatabase } from "@/db";
 import { channelInstallations } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -6,7 +7,6 @@ import { processInboundEvent } from "@/lib/channels/inbound";
 import {
   WhatsAppCloudAdapter,
   WHATSAPP_CLOUD_PROVIDER,
-  verifyWhatsAppChallenge,
 } from "@/lib/channels/providers/whatsapp/adapter";
 import {
   loadWhatsAppCredentials,
@@ -25,7 +25,7 @@ export const runtime = "nodejs";
 export async function GET(request: Request) {
   try {
     const rl = checkRateLimit({
-      key: "wa:webhook:verify",
+      key: "wa:webhook:get",
       limit: 60,
       windowMs: 60_000,
     });
@@ -36,48 +36,41 @@ export async function GET(request: Request) {
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
+    const installationTokens: string[] = [];
     const db = getDatabase();
     const installations = await db
       .select()
       .from(channelInstallations)
-      .where(
-        and(
-          eq(channelInstallations.channel, "WHATSAPP"),
-          eq(channelInstallations.provider, WHATSAPP_CLOUD_PROVIDER),
-          eq(channelInstallations.status, "ACTIVE"),
-        ),
-      );
+      .where(eq(channelInstallations.provider, WHATSAPP_CLOUD_PROVIDER));
 
     for (const installation of installations) {
+      if (installation.status !== "ACTIVE") continue;
       try {
         const creds = loadWhatsAppCredentials(installation);
-        const result = verifyWhatsAppChallenge({
-          mode,
-          token,
-          challenge,
-          expectedVerifyToken: creds.verifyToken,
-        });
-        if (result !== null) {
-          return new NextResponse(result, {
-            status: 200,
-            headers: { "Content-Type": "text/plain" },
-          });
-        }
+        installationTokens.push(creds.verifyToken);
       } catch {
         // skip bad credentials
       }
     }
 
+    const result = verifyMetaWebhookChallenge({
+      mode,
+      token,
+      challenge,
+      installationVerifyTokens: installationTokens,
+    });
+    if (result !== null) {
+      return new NextResponse(result, {
+        status: 200,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
     return new NextResponse("Forbidden", { status: 403 });
   } catch (error) {
     return jsonError(error);
   }
 }
 
-/**
- * POST — inbound WhatsApp events.
- * Installation-scoped adapter — never a global credentialed singleton.
- */
 export async function POST(request: Request) {
   try {
     const rl = checkRateLimit({

@@ -12,7 +12,7 @@ import {
   loadInstagramCredentials,
 } from "@/lib/channels/providers/instagram/installations";
 import { instagramWebhookSchema } from "@/lib/channels/providers/instagram/schemas";
-import { verifyMetaChallenge } from "@/lib/channels/providers/meta/crypto";
+import { verifyMetaWebhookChallenge } from "@/lib/channels/meta/webhook-verify";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { RateLimitError } from "@/lib/errors";
 import { jsonError } from "@/lib/api/response";
@@ -31,33 +31,34 @@ export async function GET(request: Request) {
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
+    const installationTokens: string[] = [];
     const db = getDatabase();
     const installations = await db
       .select()
       .from(channelInstallations)
-      .where(
-        eq(channelInstallations.provider, INSTAGRAM_MESSAGING_PROVIDER),
-      );
+      .where(eq(channelInstallations.provider, INSTAGRAM_MESSAGING_PROVIDER));
 
     for (const installation of installations) {
       if (installation.status !== "ACTIVE") continue;
       try {
         const creds = loadInstagramCredentials(installation);
-        const result = verifyMetaChallenge({
-          mode,
-          token,
-          challenge,
-          expectedVerifyToken: creds.verifyToken,
-        });
-        if (result !== null) {
-          return new NextResponse(result, {
-            status: 200,
-            headers: { "Content-Type": "text/plain" },
-          });
-        }
+        installationTokens.push(creds.verifyToken);
       } catch {
-        // skip
+        // skip bad credentials
       }
+    }
+
+    const result = verifyMetaWebhookChallenge({
+      mode,
+      token,
+      challenge,
+      installationVerifyTokens: installationTokens,
+    });
+    if (result !== null) {
+      return new NextResponse(result, {
+        status: 200,
+        headers: { "Content-Type": "text/plain" },
+      });
     }
     return new NextResponse("Forbidden", { status: 403 });
   } catch (error) {

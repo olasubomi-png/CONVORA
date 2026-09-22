@@ -9,7 +9,7 @@ import {
   loadFacebookCredentials,
 } from "@/lib/channels/providers/facebook/installations";
 import { facebookWebhookSchema } from "@/lib/channels/providers/facebook/schemas";
-import { verifyMetaChallenge } from "@/lib/channels/providers/meta/crypto";
+import { verifyMetaWebhookChallenge } from "@/lib/channels/meta/webhook-verify";
 import { FACEBOOK_MESSENGER_PROVIDER } from "@/lib/channels/providers/facebook/adapter";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { RateLimitError } from "@/lib/errors";
@@ -17,6 +17,7 @@ import { jsonError } from "@/lib/api/response";
 
 /**
  * GET — Meta webhook verification challenge for Facebook Page.
+ * Accepts platform META_WEBHOOK_VERIFY_TOKEN or per-installation tokens.
  */
 export async function GET(request: Request) {
   try {
@@ -32,33 +33,34 @@ export async function GET(request: Request) {
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
+    const installationTokens: string[] = [];
     const db = getDatabase();
     const installations = await db
       .select()
       .from(channelInstallations)
-      .where(
-        eq(channelInstallations.provider, FACEBOOK_MESSENGER_PROVIDER),
-      );
+      .where(eq(channelInstallations.provider, FACEBOOK_MESSENGER_PROVIDER));
 
     for (const installation of installations) {
       if (installation.status !== "ACTIVE") continue;
       try {
         const creds = loadFacebookCredentials(installation);
-        const result = verifyMetaChallenge({
-          mode,
-          token,
-          challenge,
-          expectedVerifyToken: creds.verifyToken,
-        });
-        if (result !== null) {
-          return new NextResponse(result, {
-            status: 200,
-            headers: { "Content-Type": "text/plain" },
-          });
-        }
+        installationTokens.push(creds.verifyToken);
       } catch {
-        // skip
+        // skip bad credentials
       }
+    }
+
+    const result = verifyMetaWebhookChallenge({
+      mode,
+      token,
+      challenge,
+      installationVerifyTokens: installationTokens,
+    });
+    if (result !== null) {
+      return new NextResponse(result, {
+        status: 200,
+        headers: { "Content-Type": "text/plain" },
+      });
     }
     return new NextResponse("Forbidden", { status: 403 });
   } catch (error) {
@@ -66,9 +68,6 @@ export async function GET(request: Request) {
   }
 }
 
-/**
- * POST — inbound Facebook Messenger events (installation-scoped adapter).
- */
 export async function POST(request: Request) {
   try {
     const rl = checkRateLimit({
