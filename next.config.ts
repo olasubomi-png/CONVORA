@@ -28,7 +28,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
-  serverExternalPackages: ["argon2", "postgres"],
+  serverExternalPackages: ["argon2"],
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
