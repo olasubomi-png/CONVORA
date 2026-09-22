@@ -1,149 +1,163 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   requireAuthenticatedUser,
   getUserOrganizationContexts,
 } from "@/lib/authz/context";
 import { listOrganizationConversations } from "@/lib/conversations/list";
+import { listChannelInstallations } from "@/lib/channels/installations";
+import { listInstallations as listWebChat } from "@/lib/web-chat/installations";
+import { getServerEnv } from "@/lib/env";
+import { ShareLinkBar } from "@/components/share/share-link";
 import { Container } from "@/components/ui/container";
 
-export const metadata = { title: "Dashboard — CONVORA" };
+export const metadata = { title: "Home — CONVORA" };
 
 export default async function WorkspaceHomePage() {
   const auth = await requireAuthenticatedUser();
   const memberships = await getUserOrganizationContexts(auth.user.id);
   const primary = memberships[0];
 
-  let openCount = 0;
-  let totalCount = 0;
-  if (primary) {
-    const list = await listOrganizationConversations(
-      auth.user.id,
-      primary.organizationId,
-    );
-    totalCount = list.conversations.length;
-    openCount = list.conversations.filter(
-      (c) => c.status === "OPEN" || c.status === "PENDING",
-    ).length;
+  if (!primary) {
+    redirect("/app/onboarding");
   }
+
+  const env = getServerEnv();
+  const publicUrl = `${env.APP_URL}/org/${primary.organizationSlug}`;
+
+  const [list, installations, webChat] = await Promise.all([
+    listOrganizationConversations(auth.user.id, primary.organizationId),
+    listChannelInstallations(auth.user.id, primary.organizationId),
+    listWebChat(auth.user.id, primary.organizationId),
+  ]);
+
+  const recent = list.conversations.slice(0, 5);
+  const anyChannel =
+    installations.some((i) => i.status === "ACTIVE") ||
+    webChat.some((w) => w.status === "ACTIVE");
+  const hasConversation = list.conversations.length > 0;
+
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   return (
     <Container className="py-8 lg:py-10">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--cv-fg-muted)]">
-            Dashboard
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--cv-fg)]">
-            Welcome back, {auth.user.fullName.split(" ")[0]}
-          </h1>
-          <p className="mt-1 text-sm text-[var(--cv-fg-muted)]">
-            {primary
-              ? `${primary.organizationName} · ${primary.role}`
-              : "Create an organization to get started"}
-          </p>
+      <h1 className="text-2xl font-semibold tracking-tight text-[var(--cv-fg)]">
+        {greeting}, {auth.user.fullName.split(" ")[0]}
+      </h1>
+      <p className="mt-1 text-sm text-[var(--cv-fg-muted)]">
+        Here is what you can do with CONVORA.
+      </p>
+
+      <section className="mt-8 rounded-2xl border border-[var(--cv-border)] bg-white p-5 shadow-[var(--cv-shadow-sm)]">
+        <h2 className="text-sm font-semibold">Your CONVORA profile</h2>
+        <p className="mt-1 text-sm text-[var(--cv-fg-secondary)]">
+          {primary.organizationName}
+        </p>
+        <div className="mt-4">
+          <ShareLinkBar url={publicUrl} title={primary.organizationName} />
         </div>
-        <Link
-          href="/app/inbox"
-          className="inline-flex rounded-xl bg-[var(--cv-accent)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--cv-accent-hover)]"
-        >
-          Open inbox
-        </Link>
-      </div>
+      </section>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { label: "Open conversations", value: String(openCount) },
-          { label: "Total conversations", value: String(totalCount) },
-          { label: "Organizations", value: String(memberships.length) },
-          {
-            label: "Role",
-            value: primary?.role ?? "—",
-          },
-        ].map((card) => (
-          <div
-            key={card.label}
-            className="rounded-2xl border border-[var(--cv-border)] bg-white p-5 shadow-[var(--cv-shadow-sm)]"
+      <section className="mt-6 rounded-2xl border border-[var(--cv-border)] bg-white p-5 shadow-[var(--cv-shadow-sm)]">
+        <h2 className="text-sm font-semibold">Get connected</h2>
+        <ul className="mt-4 space-y-2.5 text-sm">
+          {[
+            { done: true, label: "Create your profile" },
+            { done: true, label: "Get your CONVORA link" },
+            {
+              done: anyChannel,
+              label: "Connect a channel",
+              href: "/app/channels",
+            },
+            {
+              done: hasConversation,
+              label: "Receive your first conversation",
+              href: "/app/inbox",
+            },
+          ].map((item) => (
+            <li key={item.label} className="flex items-center gap-2">
+              <span
+                className={
+                  item.done
+                    ? "text-[var(--cv-success)]"
+                    : "text-[var(--cv-fg-subtle)]"
+                }
+              >
+                {item.done ? "✓" : "○"}
+              </span>
+              {item.href && !item.done ? (
+                <Link
+                  href={item.href}
+                  className="text-[var(--cv-accent)] hover:underline"
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <span className="text-[var(--cv-fg-secondary)]">{item.label}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mt-6">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold">Recent conversations</h2>
+          <Link
+            href="/app/inbox"
+            className="text-sm font-medium text-[var(--cv-accent)] hover:underline"
           >
-            <p className="text-xs font-medium text-[var(--cv-fg-muted)]">
-              {card.label}
+            Open inbox
+          </Link>
+        </div>
+        {recent.length === 0 ? (
+          <div className="mt-3 rounded-2xl border border-dashed border-[var(--cv-border)] bg-white p-6 text-center">
+            <p className="text-sm font-medium text-[var(--cv-fg)]">
+              Your inbox is quiet
             </p>
-            <p className="mt-2 text-2xl font-semibold tracking-tight text-[var(--cv-fg)]">
-              {card.value}
+            <p className="mt-1 text-sm text-[var(--cv-fg-muted)]">
+              Connect a channel and share your CONVORA to start receiving
+              customer conversations.
             </p>
-          </div>
-        ))}
-      </div>
-
-      <section className="mt-10">
-        <h2 className="text-sm font-semibold text-[var(--cv-fg)]">
-          Your organizations
-        </h2>
-        {!memberships.length ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-[var(--cv-border)] bg-white p-8 text-center">
-            <p className="text-sm text-[var(--cv-fg-secondary)]">
-              You are not a member of any organization yet.
-            </p>
-            <Link
-              href="/app/organization"
-              className="mt-4 inline-flex rounded-xl bg-[var(--cv-accent)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--cv-accent-hover)]"
-            >
-              Create organization
-            </Link>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <Link
+                href="/app/channels"
+                className="rounded-xl bg-[var(--cv-accent)] px-4 py-2 text-sm font-medium text-white"
+              >
+                Connect a channel
+              </Link>
+              <Link
+                href="/app/my-convora"
+                className="rounded-xl border border-[var(--cv-border)] bg-white px-4 py-2 text-sm font-medium"
+              >
+                Share your CONVORA
+              </Link>
+            </div>
           </div>
         ) : (
-          <ul className="mt-4 divide-y divide-[var(--cv-border)] overflow-hidden rounded-2xl border border-[var(--cv-border)] bg-white shadow-[var(--cv-shadow-sm)]">
-            {memberships.map((m) => (
-              <li
-                key={m.id}
-                className="flex items-center justify-between gap-4 px-4 py-3.5 text-sm"
-              >
-                <div>
-                  <p className="font-medium text-[var(--cv-fg)]">
-                    {m.organizationName}
-                  </p>
-                  <p className="text-[var(--cv-fg-muted)]">
-                    {m.organizationSlug} · {m.role}
-                  </p>
-                </div>
+          <ul className="mt-3 divide-y divide-[var(--cv-border)] overflow-hidden rounded-2xl border border-[var(--cv-border)] bg-white">
+            {recent.map((c) => (
+              <li key={c.id}>
                 <Link
-                  href={`/app/organization?org=${m.organizationId}`}
-                  className="font-medium text-[var(--cv-accent)] hover:underline"
+                  href={`/app/inbox?conversation=${c.id}`}
+                  className="flex items-center justify-between gap-3 px-4 py-3 text-sm hover:bg-[var(--cv-surface-muted)]"
                 >
-                  Open
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-[var(--cv-fg)]">
+                      {c.customer.displayName}
+                    </p>
+                    <p className="text-xs text-[var(--cv-fg-muted)]">
+                      {c.channel} · {c.status}
+                    </p>
+                  </div>
+                  <span className="text-xs text-[var(--cv-fg-subtle)]">Open</span>
                 </Link>
               </li>
             ))}
           </ul>
         )}
-      </section>
-
-      <section className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {[
-          {
-            href: "/app/customers",
-            title: "Customers",
-            body: "Profiles, tags, and history",
-          },
-          {
-            href: "/app/settings/web-chat",
-            title: "Channels",
-            body: "Web Chat, WhatsApp, Meta",
-          },
-          {
-            href: "/app/settings/billing",
-            title: "Billing",
-            body: "Trial, plans, and payments",
-          },
-        ].map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="rounded-2xl border border-[var(--cv-border)] bg-white p-5 shadow-[var(--cv-shadow-sm)] transition-colors hover:border-[var(--cv-accent)]"
-          >
-            <p className="font-semibold text-[var(--cv-fg)]">{item.title}</p>
-            <p className="mt-1 text-sm text-[var(--cv-fg-muted)]">{item.body}</p>
-          </Link>
-        ))}
       </section>
     </Container>
   );

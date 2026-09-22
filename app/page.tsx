@@ -47,15 +47,15 @@ export default function HomePage() {
           <Container className="relative grid gap-12 py-16 md:grid-cols-12 md:py-24">
             <div className="md:col-span-6">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--cv-accent)]">
-                Multi-channel workspace
+                One inbox for every conversation
               </p>
               <h1 className="mt-4 text-4xl font-semibold leading-[1.1] tracking-tight text-[var(--cv-fg)] md:text-5xl">
                 Every customer conversation. One workspace.
               </h1>
               <p className="mt-5 max-w-lg text-base leading-7 text-[var(--cv-fg-secondary)]">
-                CONVORA is the communication layer between organizations and the
-                people they serve—shared inbox, customers, AI assist, and
-                automations with production-grade tenancy.
+                Connect WhatsApp, Facebook, Instagram and your website. Let customers
+                message you where they already are, while you manage every
+                conversation from CONVORA.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link
@@ -91,7 +91,7 @@ export default function HomePage() {
                     {[
                       ["Sarah Miller", "WhatsApp", "Open"],
                       ["John Davis", "Web Chat", "Open"],
-                      ["Emily Wilson", "Email", "Pending"],
+                      ["Emily Wilson", "Instagram", "Pending"],
                     ].map(([name, ch, st]) => (
                       <div
                         key={name}

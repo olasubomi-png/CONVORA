@@ -12,10 +12,10 @@ type NavItem = {
 };
 
 const primaryNav: NavItem[] = [
-  { href: "/app", label: "Dashboard", match: (p) => p === "/app" },
+  { href: "/app", label: "Home", match: (p) => p === "/app" },
   {
     href: "/app/inbox",
-    label: "Conversations",
+    label: "Inbox",
     match: (p) => p.startsWith("/app/inbox"),
   },
   {
@@ -24,33 +24,24 @@ const primaryNav: NavItem[] = [
     match: (p) => p.startsWith("/app/customers"),
   },
   {
-    href: "/app/team",
-    label: "Teams",
-    match: (p) => p.startsWith("/app/team"),
+    href: "/app/my-convora",
+    label: "My CONVORA",
+    match: (p) => p.startsWith("/app/my-convora") || p.startsWith("/app/organization/profile"),
   },
   {
-    href: "/app/automations",
-    label: "Automations",
-    match: (p) => p.startsWith("/app/automations"),
-  },
-  {
-    href: "/app/analytics",
-    label: "Analytics",
-    match: (p) => p.startsWith("/app/analytics"),
+    href: "/app/channels",
+    label: "Channels",
+    match: (p) =>
+      p.startsWith("/app/channels") || p.startsWith("/app/settings/"),
   },
 ];
 
-const channelNav: NavItem[] = [
-  { href: "/app/settings/whatsapp", label: "WhatsApp" },
-  { href: "/app/settings/web-chat", label: "Web Chat" },
-  { href: "/app/settings/facebook", label: "Facebook" },
-  { href: "/app/settings/instagram", label: "Instagram" },
-];
-
-const settingsNav: NavItem[] = [
-  { href: "/app/organization", label: "Organization" },
-  { href: "/app/organization/profile", label: "Org profile" },
+const moreNav: NavItem[] = [
+  { href: "/app/team", label: "Team" },
+  { href: "/app/automations", label: "Automations" },
+  { href: "/app/analytics", label: "Analytics" },
   { href: "/app/profile", label: "Agent profile" },
+  { href: "/app/organization", label: "Organization" },
   { href: "/app/settings/billing", label: "Billing" },
 ];
 
@@ -94,6 +85,8 @@ export function AppShell({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
+  const hideChrome =
+    pathname.startsWith("/app/onboarding");
 
   const sidebar = (
     <div className="flex h-full flex-col">
@@ -106,49 +99,19 @@ export function AppShell({
         </span>
       </div>
 
-      <nav
-        className="flex-1 space-y-6 overflow-y-auto px-3 py-4"
-        aria-label="Workspace"
-      >
+      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4" aria-label="Workspace">
         <div className="space-y-0.5">
           {primaryNav.map((item) => (
-            <NavLink
-              key={item.href}
-              item={item}
-              pathname={pathname}
-              onNavigate={close}
-            />
+            <NavLink key={item.href} item={item} pathname={pathname} onNavigate={close} />
           ))}
         </div>
-
         <div>
           <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-            Channels
+            More
           </p>
           <div className="space-y-0.5">
-            {channelNav.map((item) => (
-              <NavLink
-                key={item.href}
-                item={item}
-                pathname={pathname}
-                onNavigate={close}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-            Settings
-          </p>
-          <div className="space-y-0.5">
-            {settingsNav.map((item) => (
-              <NavLink
-                key={item.href}
-                item={item}
-                pathname={pathname}
-                onNavigate={close}
-              />
+            {moreNav.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={close} />
             ))}
           </div>
         </div>
@@ -176,14 +139,28 @@ export function AppShell({
     </div>
   );
 
+  if (hideChrome) {
+    return (
+      <div className="min-h-screen bg-[var(--cv-bg)]">
+        <header className="border-b border-[var(--cv-border)] bg-white px-4 py-3">
+          <Link href="/app" className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--cv-accent)] text-sm font-bold text-white">
+              C
+            </span>
+            <span className="text-sm font-semibold tracking-[0.14em]">CONVORA</span>
+          </Link>
+        </header>
+        <main>{children}</main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-[var(--cv-bg)]">
-      {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 bg-[var(--cv-sidebar)] lg:block">
         {sidebar}
       </aside>
 
-      {/* Mobile drawer */}
       {open ? (
         <div className="fixed inset-0 z-40 lg:hidden">
           <button
@@ -211,10 +188,6 @@ export function AppShell({
             </svg>
           </button>
           <div className="flex flex-1 items-center gap-2 rounded-xl border border-[var(--cv-border)] bg-[var(--cv-surface-muted)] px-3 py-1.5 text-sm text-[var(--cv-fg-muted)]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 opacity-60">
-              <circle cx="11" cy="11" r="7" />
-              <path d="M21 21l-4.3-4.3" />
-            </svg>
             <span className="truncate">Search conversations, customers…</span>
           </div>
         </header>
