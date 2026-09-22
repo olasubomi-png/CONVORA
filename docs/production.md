@@ -217,3 +217,123 @@ Do **not** commit or typecheck Drizzle Kit introspect outputs such as `db/migrat
 
 `tsconfig.json` excludes `db/migrations` from compilation. If a local `relations.ts` appears after `drizzle-kit pull`/`introspect`, delete it or leave it ignored.
 
+
+## VPS deployment with standalone artifact (low-memory hosts)
+
+Low-memory VPS instances (~1 GiB RAM) should **not** run `next build` on the server.
+CI and developer machines produce a **standalone** Node server (`output: "standalone"` in `next.config.ts`).
+
+This is compatible with API routes, Drizzle/`postgres`, Web Chat, and channel webhooks. Vercel continues to use its normal Next.js build pipeline and does not require the standalone folder.
+
+### 1. Build outside the VPS
+
+On CI or a machine with ≥2 GiB RAM (Node 20 recommended):
+
+```bash
+git checkout <release-sha>
+npm ci
+export NODE_ENV=production
+# set build-time env if your tooling requires non-secret placeholders;
+# runtime secrets are injected only on the VPS
+npm run build
+```
+
+After a successful build, these paths exist:
+
+- `.next/standalone/` — Node server (`server.js`) + traced dependencies
+- `.next/static/` — client static assets (must be copied next to standalone)
+- `public/` — public assets (e.g. `public/widget.js`)
+
+### 2. Package the artifact
+
+From the repository root after build:
+
+```bash
+mkdir -p dist/standalone
+cp -a .next/standalone/. dist/standalone/
+mkdir -p dist/standalone/.next/static
+cp -a .next/static/. dist/standalone/.next/static/
+if [ -d public ]; then
+  mkdir -p dist/standalone/public
+  cp -a public/. dist/standalone/public/
+fi
+# Optional tarball for scp:
+tar -C dist -czf convora-standalone.tgz standalone
+```
+
+`serverExternalPackages` includes `argon2` and `postgres` (native modules). Prefer building the artifact on the **same OS/architecture** as the VPS (e.g. Linux x64). If native modules fail to load on the VPS, on the VPS (no build):
+
+```bash
+cd /var/www/CONVORA
+npm ci --omit=dev
+```
+
+and ensure `NODE_PATH` / working directory still runs the standalone server from the package root layout documented below.
+
+### 3. Deploy to the VPS
+
+Example paths assume app root `/var/www/CONVORA`:
+
+```bash
+# On VPS — stop process first if upgrading
+# pm2 stop convora || true
+
+# Sync artifact (from your workstation/CI)
+rsync -a --delete dist/standalone/ user@vps:/var/www/CONVORA/run/
+
+# Or extract tarball into /var/www/CONVORA/run/
+```
+
+Create `/var/www/CONVORA/run/.env` on the VPS only (never commit):
+
+```bash
+NODE_ENV=production
+PORT=3000
+HOSTNAME=0.0.0.0
+DATABASE_URL=postgresql://…?sslmode=require
+APP_URL=https://your.production.domain
+CHANNEL_SECRETS_KEY=…   # openssl rand -base64 32
+# optional: PAYSTACK_*, AI_PROVIDER, OPENAI_*
+```
+
+### 4. Start with Node or PM2
+
+```bash
+cd /var/www/CONVORA/run
+export $(grep -v '^#' .env | xargs)   # or use PM2 env_file
+node server.js
+```
+
+PM2 example:
+
+```bash
+cd /var/www/CONVORA/run
+pm2 start server.js --name convora -i 1 --env production
+pm2 save
+```
+
+`PORT` and `HOSTNAME` are read by the Next standalone server (default port 3000).
+
+### 5. Nginx
+
+Proxy to `http://127.0.0.1:3000` with TLS termination. Forward `Host` and `X-Forwarded-*` headers. WebSocket upgrade is not required for the default Web Chat polling path.
+
+### 6. Health checks
+
+- Liveness: `GET /api/health` → 200
+- Readiness: `GET /api/health/ready` → 200 when Postgres is reachable
+
+### 7. Rollback
+
+1. Keep the previous `run/` directory (e.g. `run.prev/`).
+2. `pm2 stop convora`
+3. Swap directories back to the previous artifact.
+4. `pm2 start convora`
+5. Do **not** reverse SQL migrations unless a dedicated plan exists.
+
+### 8. What not to do on the low-memory VPS
+
+- Do not run `npm run build` / `next build` on the 908 MiB host.
+- Do not run `drizzle-kit push` against production.
+- Do not commit `.env*` files.
+
