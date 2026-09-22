@@ -96,7 +96,9 @@ jobs:
           fi
           tar -C dist -czf convora-standalone.tgz standalone
           ls -la convora-standalone.tgz
-          tar -tzf convora-standalone.tgz | head -40
+          # Avoid pipefail SIGPIPE from `head` closing the pipe early
+          tar -tzf convora-standalone.tgz | head -40 || true
+          test -f dist/standalone/server.js
 
       - name: Upload standalone artifact
         uses: actions/upload-artifact@v4
