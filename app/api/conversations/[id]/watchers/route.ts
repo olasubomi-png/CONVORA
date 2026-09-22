@@ -6,13 +6,13 @@ import {
 } from "@/lib/conversations/watchers";
 import { jsonError, jsonOk } from "@/lib/api/response";
 
-type Params = { params: Promise<{ conversationId: string }> };
+type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, { params }: Params) {
   try {
     const auth = await requireAuthenticatedUser();
-    const { conversationId } = await params;
-    const watchers = await listWatchers(auth.user.id, conversationId);
+    const { id } = await params;
+    const watchers = await listWatchers(auth.user.id, id);
     return jsonOk({ watchers });
   } catch (error) {
     return jsonError(error);
@@ -22,8 +22,8 @@ export async function GET(_request: Request, { params }: Params) {
 export async function POST(_request: Request, { params }: Params) {
   try {
     const auth = await requireAuthenticatedUser();
-    const { conversationId } = await params;
-    const watcher = await followConversation(auth.user.id, conversationId);
+    const { id } = await params;
+    const watcher = await followConversation(auth.user.id, id);
     return jsonOk({ watcher }, 201);
   } catch (error) {
     return jsonError(error);
@@ -33,8 +33,8 @@ export async function POST(_request: Request, { params }: Params) {
 export async function DELETE(_request: Request, { params }: Params) {
   try {
     const auth = await requireAuthenticatedUser();
-    const { conversationId } = await params;
-    await unfollowConversation(auth.user.id, conversationId);
+    const { id } = await params;
+    await unfollowConversation(auth.user.id, id);
     return jsonOk({ ok: true });
   } catch (error) {
     return jsonError(error);
