@@ -149,3 +149,62 @@ Use `lib/observability/logger` for structured logs. Field names matching passwor
 - [ ] Outbox processing strategy chosen (cron/worker)
 - [ ] Health checks wired in load balancer
 - [ ] Backup / point-in-time recovery enabled on Neon
+
+
+## Recommended deployment sequence
+
+Follow in order. Do not skip migration verification.
+
+### 1. Neon (PostgreSQL)
+
+1. Create a Neon project and database (SSL enabled).
+2. Copy the connection string into `DATABASE_URL` (include `sslmode=require`).
+3. From a secure machine with the production URL:
+
+```bash
+export DATABASE_URL='postgresql://…?sslmode=require'   # do not echo
+for f in db/migrations/*.sql; do
+  echo "Applying $(basename "$f")"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+done
+psql "$DATABASE_URL" -c "\dt"
+```
+
+4. Confirm critical tables exist: `users`, `sessions`, `organizations`, `conversations`, `messages`, `web_chat_installations`, `organization_subscriptions`.
+
+### 2. Secrets
+
+1. Generate `CHANNEL_SECRETS_KEY`: `openssl rand -base64 32`
+2. Set `APP_URL` to the public HTTPS origin (no trailing slash).
+3. Set `NODE_ENV=production`.
+4. Optionally set Paystack and OpenAI keys per the environment table above.
+
+### 3. Vercel (primary app)
+
+1. Import the GitHub repository.
+2. Framework: Next.js. Build: `npm run build`. Install: `npm ci`.
+3. Node.js **20.x** (see `package.json` engines).
+4. Configure all server env vars in the Vercel project (never commit them).
+5. Deploy. Point DNS A/CNAME to Vercel. Enable HTTPS.
+6. Smoke: `/api/health`, `/api/health/ready`, register/login.
+
+### 4. VPS (optional workers)
+
+1. Install Node 20, clone release, `npm ci`, `npm run build`.
+2. Run `npm run start` only if not hosting the app on Vercel.
+3. Schedule outbox processing (cron or PM2) against the same `DATABASE_URL`.
+4. Put Nginx in front if serving the app from the VPS; terminate TLS at Nginx.
+
+### 5. Provider configuration
+
+1. Paystack webhook → `{APP_URL}/api/webhooks/paystack`
+2. WhatsApp Cloud → `{APP_URL}/api/webhooks/whatsapp`
+3. Facebook / Instagram → `{APP_URL}/api/webhooks/facebook` and `/api/webhooks/instagram`
+4. Web Chat: create installation in-app; allowlist exact browser origins.
+
+### 6. Production verification
+
+1. Register a real user; complete onboarding; open `/org/{slug}`.
+2. Enable Web Chat; send a visitor message; confirm inbox + reply path.
+3. (If configured) WhatsApp/Meta test message through webhooks.
+4. Confirm no secrets appear in browser network responses or client bundles.
