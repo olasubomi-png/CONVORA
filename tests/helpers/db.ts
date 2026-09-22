@@ -69,6 +69,7 @@ export async function truncateAllTables(): Promise<void> {
       channel_message_deliveries,
       channel_inbound_events,
       customer_channel_identities,
+      channel_oauth_states,
       channel_installations,
       web_chat_message_idempotency,
       web_chat_visitors,

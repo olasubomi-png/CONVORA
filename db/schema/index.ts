@@ -232,3 +232,4 @@ export type {
   PaymentTransaction,
   PaymentStatus,
 } from "./billing";
+export * from "./channel-oauth";

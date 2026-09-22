@@ -46,10 +46,10 @@ export default async function InstagramSettingsPage() {
         Production messaging may require Meta App Review.
       </p>
       <div className="mt-8">
-        <InstagramSettings
-          organizationId={primary.organizationId}
+        <InstagramSettings organizationId={primary.organizationId}
           installations={installations}
           webhookUrl={`${process.env.APP_URL ?? ""}/api/webhooks/instagram`}
+          metaConfigured={Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET)}
         />
       </div>
     </Container>

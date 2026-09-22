@@ -353,3 +353,22 @@ Proxy to `http://127.0.0.1:3000` with TLS termination. Forward `Host` and `X-For
 - Do not run `drizzle-kit push` against production.
 - Do not commit `.env*` files.
 
+## Meta channel platform configuration
+
+Server-only environment variables (never expose to the browser):
+
+| Variable | Purpose |
+| --- | --- |
+| `META_APP_ID` | Meta app id for OAuth |
+| `META_APP_SECRET` | Meta app secret (token exchange + webhook signatures) |
+| `META_REDIRECT_URI` | Optional; defaults to `{APP_URL}/api/channels/meta/oauth/callback` |
+| `META_WEBHOOK_VERIFY_TOKEN` | Shared verify token for Meta webhook challenges |
+
+Without `META_APP_ID` and `META_APP_SECRET`, channel UI shows **Not configured** and OAuth start returns a configuration error. Web Chat continues to work independently.
+
+Webhook URLs (register in Meta app):
+
+- `{APP_URL}/api/webhooks/whatsapp`
+- `{APP_URL}/api/webhooks/facebook`
+- `{APP_URL}/api/webhooks/instagram`
+- OAuth callback: `{APP_URL}/api/channels/meta/oauth/callback`

@@ -8,6 +8,7 @@ import { listChannelInstallations } from "@/lib/channels/installations";
 import { listInstallations as listWebChat } from "@/lib/web-chat/installations";
 import { Container } from "@/components/ui/container";
 import { Badge } from "@/components/ui/badge";
+import { isMetaPlatformConfigured } from "@/lib/channels/meta/platform-config";
 
 export const metadata = { title: "Channels — CONVORA" };
 
@@ -34,6 +35,8 @@ export default async function ChannelsPage() {
 
   const anyActiveWeb = webChat.some((w) => w.status === "ACTIVE");
 
+  const metaReady = isMetaPlatformConfigured();
+
   function metaStatus(
     match: (ch: string, provider: string) => boolean,
   ): { label: string; tone: "success" | "neutral" | "warning" } {
@@ -43,12 +46,13 @@ export default async function ChannelsPage() {
         match(i.channel.toUpperCase(), i.provider.toUpperCase()),
     );
     if (hit) return { label: "Connected", tone: "success" };
+    if (!metaReady) return { label: "Not configured", tone: "warning" };
     const pending = installations.find(
       (i) =>
         i.status !== "ACTIVE" &&
         match(i.channel.toUpperCase(), i.provider.toUpperCase()),
     );
-    if (pending) return { label: "Needs authorization", tone: "warning" };
+    if (pending) return { label: "Needs action", tone: "warning" };
     return { label: "Not connected", tone: "neutral" };
   }
 

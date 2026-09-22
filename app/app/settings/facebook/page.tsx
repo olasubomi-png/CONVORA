@@ -46,10 +46,10 @@ export default async function FacebookSettingsPage() {
         CONVORA inbox.
       </p>
       <div className="mt-8">
-        <FacebookSettings
-          organizationId={primary.organizationId}
+        <FacebookSettings organizationId={primary.organizationId}
           installations={installations}
           webhookUrl={`${process.env.APP_URL ?? ""}/api/webhooks/facebook`}
+          metaConfigured={Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET)}
         />
       </div>
     </Container>
