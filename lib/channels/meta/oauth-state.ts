@@ -7,8 +7,25 @@ import type { MetaOAuthProvider } from "@/lib/channels/meta/platform-config";
 
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+export const META_OAUTH_PROVIDERS = [
+  "whatsapp_cloud",
+  "meta_messenger",
+  "meta_instagram",
+] as const;
+
 function hashState(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+function assertProvider(value: string): MetaOAuthProvider {
+  if (
+    value === "whatsapp_cloud" ||
+    value === "meta_messenger" ||
+    value === "meta_instagram"
+  ) {
+    return value;
+  }
+  throw new ValidationError("OAuth state provider is invalid.");
 }
 
 /**
@@ -37,7 +54,11 @@ export async function createOAuthState(input: {
 }
 
 /**
- * Consume a one-time OAuth state. Rejects reuse, expiry, and unknown tokens.
+ * Atomically consume a one-time OAuth state.
+ *
+ * Uses a single conditional UPDATE … RETURNING so concurrent callers cannot
+ * both mark the same state as used. Rejects unknown, expired, and already-used
+ * tokens. Organization/user/provider come only from the stored row.
  */
 export async function consumeOAuthState(token: string): Promise<{
   userId: string;
@@ -50,42 +71,60 @@ export async function consumeOAuthState(token: string): Promise<{
 
   const stateHash = hashState(token);
   const db = getDatabase();
+  const now = new Date();
 
-  const rows = await db
-    .select()
-    .from(channelOauthStates)
+  const updated = await db
+    .update(channelOauthStates)
+    .set({ usedAt: now })
     .where(
       and(
         eq(channelOauthStates.stateHash, stateHash),
         isNull(channelOauthStates.usedAt),
-        gt(channelOauthStates.expiresAt, new Date()),
+        gt(channelOauthStates.expiresAt, now),
       ),
     )
-    .limit(1);
+    .returning({
+      userId: channelOauthStates.userId,
+      organizationId: channelOauthStates.organizationId,
+      provider: channelOauthStates.provider,
+    });
 
-  const row = rows[0];
+  const row = updated[0];
   if (!row) {
-    throw new ValidationError("OAuth state is invalid, expired, or already used.");
-  }
-
-  const [updated] = await db
-    .update(channelOauthStates)
-    .set({ usedAt: new Date() })
-    .where(
-      and(
-        eq(channelOauthStates.id, row.id),
-        isNull(channelOauthStates.usedAt),
-      ),
-    )
-    .returning();
-
-  if (!updated) {
-    throw new ValidationError("OAuth state is invalid, expired, or already used.");
+    throw new ValidationError(
+      "OAuth state is invalid, expired, or already used.",
+    );
   }
 
   return {
-    userId: updated.userId,
-    organizationId: updated.organizationId,
-    provider: updated.provider as MetaOAuthProvider,
+    userId: row.userId,
+    organizationId: row.organizationId,
+    provider: assertProvider(row.provider),
   };
+}
+
+/**
+ * Test helper: insert an already-expired unused state for expiry tests.
+ */
+export async function createExpiredOAuthStateForTests(input: {
+  userId: string;
+  organizationId: string;
+  provider: MetaOAuthProvider;
+}): Promise<string> {
+  const token = randomBytes(32).toString("base64url");
+  const stateHash = hashState(token);
+  const db = getDatabase();
+  await db.insert(channelOauthStates).values({
+    stateHash,
+    userId: input.userId,
+    organizationId: input.organizationId,
+    provider: input.provider,
+    expiresAt: new Date(Date.now() - 60_000),
+  });
+  return token;
+}
+
+/** Expose hash for concurrent tests only. */
+export function hashOAuthStateTokenForTests(token: string): string {
+  return hashState(token);
 }
