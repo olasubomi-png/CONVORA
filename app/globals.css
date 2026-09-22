@@ -1,37 +1,86 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #0a0a0a;
-  --muted: #525252;
-  --muted-bg: #fafafa;
-  --border: #e5e5e5;
-  --border-strong: #0a0a0a;
-  --primary: #0a0a0a;
-  --primary-fg: #ffffff;
-  --primary-hover: #262626;
-  --danger: #b91c1c;
-  --danger-bg: #fef2f2;
-  --danger-border: #fecaca;
-  --ring: #0a0a0a;
+  /* Surfaces */
+  --cv-bg: #f4f6f9;
+  --cv-surface: #ffffff;
+  --cv-surface-muted: #f8fafc;
+  --cv-sidebar: #0b1220;
+  --cv-sidebar-hover: #141c2e;
+  --cv-sidebar-active: #1a2438;
+  --cv-sidebar-text: #94a3b8;
+  --cv-sidebar-text-active: #ffffff;
+
+  /* Brand / accent (from product reference) */
+  --cv-accent: #2563eb;
+  --cv-accent-hover: #1d4ed8;
+  --cv-accent-soft: #eff6ff;
+  --cv-accent-ring: rgba(37, 99, 235, 0.35);
+
+  /* Text */
+  --cv-fg: #0f172a;
+  --cv-fg-secondary: #475569;
+  --cv-fg-muted: #64748b;
+  --cv-fg-subtle: #94a3b8;
+
+  /* Borders & elevation */
+  --cv-border: #e2e8f0;
+  --cv-border-strong: #cbd5e1;
+  --cv-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --cv-shadow-md: 0 4px 16px rgba(15, 23, 42, 0.06);
+  --cv-radius: 0.75rem;
+  --cv-radius-sm: 0.5rem;
+  --cv-radius-full: 9999px;
+
+  /* Semantic */
+  --cv-success: #059669;
+  --cv-success-soft: #ecfdf5;
+  --cv-warning: #d97706;
+  --cv-warning-soft: #fffbeb;
+  --cv-danger: #dc2626;
+  --cv-danger-soft: #fef2f2;
+
+  /* Channels */
+  --cv-whatsapp: #25d366;
+  --cv-webchat: #2563eb;
+  --cv-email: #8b5cf6;
+  --cv-instagram: #e1306c;
+  --cv-facebook: #1877f2;
+
+  --background: var(--cv-bg);
+  --foreground: var(--cv-fg);
+  --ring: var(--cv-accent);
 }
 
 html {
   scroll-behavior: smooth;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-feature-settings: "kern" 1, "liga" 1;
+  -webkit-font-smoothing: antialiased;
 }
 
 :focus-visible {
-  outline: 2px solid var(--ring);
+  outline: 2px solid var(--cv-accent);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: #0a0a0a;
-  color: #ffffff;
+  background: var(--cv-accent-soft);
+  color: var(--cv-fg);
 }

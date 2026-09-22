@@ -3,147 +3,153 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Container } from "@/components/ui/container";
 
-const valueProps = [
+const features = [
   {
     title: "Unified inbox",
-    body: "Every conversation from Web Chat, WhatsApp, Facebook Messenger, and Instagram lands in one agent workspace scoped to your organization.",
-  },
-  {
-    title: "Multi-channel without chaos",
-    body: "Provider adapters normalize inbound and outbound messages into a single conversation model—agents work threads, not channel silos.",
-  },
-  {
-    title: "AI as a copilot",
-    body: "Summaries, suggested replies, and context assistance stay human-approved. Agents remain in control of what customers see.",
-  },
-  {
-    title: "Automation that stays safe",
-    body: "Deterministic rules react to conversation and customer events—assignment, tags, priority, notes—without autonomous customer messaging.",
+    body: "WhatsApp, Web Chat, Facebook, and Instagram in one agent workspace.",
   },
   {
     title: "Customer intelligence",
-    body: "Organization-owned customer records, attributes, tags, notes, and activity timelines that survive agent turnover.",
+    body: "Profiles, tags, notes, and history owned by the organization—not a single agent.",
   },
   {
-    title: "Security by design",
-    body: "Multi-tenant isolation, role-based access, encrypted channel credentials, signed webhooks, and audit trails are enforced server-side.",
+    title: "AI copilot",
+    body: "Summaries and suggested replies with human approval before anything is sent.",
+  },
+  {
+    title: "Automations",
+    body: "Deterministic rules for assignment, tags, priority, and internal notifications.",
+  },
+  {
+    title: "Analytics",
+    body: "Conversation volume, response patterns, and channel activity—tenant-scoped.",
+  },
+  {
+    title: "Enterprise security",
+    body: "Multi-tenant isolation, RBAC, encrypted credentials, and signed webhooks.",
   },
 ];
 
 const channels = [
-  "Web Chat",
-  "WhatsApp",
-  "Facebook Messenger",
-  "Instagram Messaging",
-];
-
-const plans = [
-  {
-    name: "Starter",
-    price: "₦6,799",
-    period: "/ month",
-    yearly: "₦65,270 / year",
-    items: [
-      "Web Chat & Facebook Messenger",
-      "AI with a monthly allowance",
-      "Customers & conversations",
-      "Shared inbox",
-    ],
-  },
-  {
-    name: "Premium",
-    price: "₦15,999",
-    period: "/ month",
-    yearly: "₦153,590 / year",
-    items: [
-      "WhatsApp & Instagram included",
-      "Higher AI allowance",
-      "Automations",
-      "Advanced analytics",
-    ],
-  },
+  { name: "Web Chat", desc: "Embed on your site" },
+  { name: "WhatsApp", desc: "Cloud API" },
+  { name: "Facebook", desc: "Messenger" },
+  { name: "Instagram", desc: "Messaging" },
 ];
 
 export default function HomePage() {
   return (
-    <div id="top">
+    <div id="top" className="bg-white">
       <SiteHeader />
       <main>
-        <section className="border-b border-[#e5e5e5] bg-white">
-          <Container className="grid gap-12 py-20 md:grid-cols-12 md:py-28">
-            <div className="md:col-span-7">
-              <p className="text-sm tracking-[0.16em] text-[#525252]">
-                MULTI-CHANNEL CUSTOMER COMMUNICATION
+        <section className="relative overflow-hidden border-b border-[var(--cv-border)]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--cv-accent-soft),_transparent_55%)]" />
+          <Container className="relative grid gap-12 py-16 md:grid-cols-12 md:py-24">
+            <div className="md:col-span-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--cv-accent)]">
+                Multi-channel workspace
               </p>
-              <h1 className="mt-4 max-w-3xl text-4xl leading-tight tracking-tight md:text-5xl">
+              <h1 className="mt-4 text-4xl font-semibold leading-[1.1] tracking-tight text-[var(--cv-fg)] md:text-5xl">
                 Every customer conversation. One workspace.
               </h1>
-              <p className="mt-6 max-w-2xl text-lg leading-7 text-[#404040]">
+              <p className="mt-5 max-w-lg text-base leading-7 text-[var(--cv-fg-secondary)]">
                 CONVORA is the communication layer between organizations and the
-                people they serve—Web Chat, WhatsApp, Facebook Messenger, and
-                Instagram in a single secure workspace for your team.
+                people they serve—shared inbox, customers, AI assist, and
+                automations with production-grade tenancy.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link
                   href="/register"
-                  className="inline-flex items-center bg-[#0a0a0a] px-4 py-2.5 text-sm text-white hover:bg-[#262626]"
+                  className="inline-flex items-center rounded-xl bg-[var(--cv-accent)] px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[var(--cv-accent-hover)]"
                 >
-                  Start free trial
+                  Start 90-day free trial
                 </Link>
                 <Link
                   href="/login"
-                  className="inline-flex items-center border border-[#e5e5e5] px-4 py-2.5 text-sm text-[#0a0a0a] hover:border-[#0a0a0a]"
+                  className="inline-flex items-center rounded-xl border border-[var(--cv-border)] bg-white px-5 py-2.5 text-sm font-medium text-[var(--cv-fg)] hover:bg-[var(--cv-surface-muted)]"
                 >
                   Sign in
                 </Link>
               </div>
-              <p className="mt-4 text-sm text-[#525252]">
-                90-day free Premium-level trial. No payment required to start.
+              <p className="mt-4 text-xs text-[var(--cv-fg-muted)]">
+                Premium-level access during trial · No card required to start
               </p>
             </div>
-            <aside className="border border-[#e5e5e5] bg-[#fafafa] p-6 md:col-span-5">
-              <h2 className="text-sm font-medium tracking-[0.12em] text-[#525252]">
-                CHANNELS
-              </h2>
-              <ul className="mt-4 space-y-3 text-sm">
-                {channels.map((c) => (
-                  <li
-                    key={c}
-                    className="flex items-center justify-between border-t border-[#e5e5e5] pt-3 first:border-t-0 first:pt-0"
-                  >
-                    <span>{c}</span>
-                    <span className="text-[#0a0a0a]">Supported</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-6 text-xs leading-5 text-[#525252]">
-                All channels feed the same conversation engine and shared agent
-                inbox—tenant-isolated per organization.
-              </p>
-            </aside>
+
+            {/* Product preview card */}
+            <div className="md:col-span-6">
+              <div className="overflow-hidden rounded-2xl border border-[var(--cv-border)] bg-white shadow-[var(--cv-shadow-md)]">
+                <div className="flex items-center gap-2 border-b border-[var(--cv-border)] bg-[var(--cv-sidebar)] px-3 py-2.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-slate-500" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-slate-500" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-slate-500" />
+                  <span className="ml-2 text-[11px] text-slate-400">CONVORA Inbox</span>
+                </div>
+                <div className="grid grid-cols-12 text-left text-xs">
+                  <div className="col-span-4 border-r border-[var(--cv-border)] bg-[var(--cv-surface-muted)] p-3">
+                    <p className="font-semibold text-[var(--cv-fg)]">Conversations</p>
+                    {[
+                      ["Sarah Miller", "WhatsApp", "Open"],
+                      ["John Davis", "Web Chat", "Open"],
+                      ["Emily Wilson", "Email", "Pending"],
+                    ].map(([name, ch, st]) => (
+                      <div
+                        key={name}
+                        className="mt-2 rounded-lg border border-[var(--cv-border)] bg-white p-2"
+                      >
+                        <p className="font-medium text-[var(--cv-fg)]">{name}</p>
+                        <p className="mt-0.5 text-[10px] text-[var(--cv-fg-muted)]">
+                          {ch} · {st}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="col-span-8 p-3">
+                    <div className="flex items-center justify-between border-b border-[var(--cv-border)] pb-2">
+                      <div>
+                        <p className="font-semibold text-[var(--cv-fg)]">Sarah Miller</p>
+                        <p className="text-[10px] text-[var(--cv-fg-muted)]">WhatsApp · Open · High</p>
+                      </div>
+                      <span className="rounded-full bg-[var(--cv-accent-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--cv-accent)]">
+                        Assigned
+                      </span>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-slate-100 px-3 py-2 text-[var(--cv-fg)]">
+                        Hi, I need help with my order. It has been 5 days.
+                      </div>
+                      <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-[var(--cv-accent)] px-3 py-2 text-white">
+                        Happy to help—could you share your order number?
+                      </div>
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <div className="h-8 flex-1 rounded-lg border border-[var(--cv-border)] bg-[var(--cv-surface-muted)]" />
+                      <div className="h-8 w-16 rounded-lg bg-[var(--cv-accent)]" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </Container>
         </section>
 
-        <section id="product" className="border-b border-[#e5e5e5] bg-[#fafafa]">
+        <section id="product" className="border-b border-[var(--cv-border)] bg-[var(--cv-surface-muted)]">
           <Container className="py-16 md:py-20">
-            <p className="text-sm tracking-[0.16em] text-[#525252]">PRODUCT</p>
-            <h2 className="mt-3 max-w-2xl text-3xl tracking-tight">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--cv-accent)]">
+              Product
+            </p>
+            <h2 className="mt-2 max-w-xl text-3xl font-semibold tracking-tight text-[var(--cv-fg)]">
               Built for teams that outgrow fragmented inboxes.
             </h2>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-[#404040]">
-              CONVORA keeps customers, conversations, agents, and audit history
-              inside your organization—so when channels multiply, your
-              operations stay coherent.
-            </p>
-            <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {valueProps.map((item) => (
+            <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {features.map((f) => (
                 <article
-                  key={item.title}
-                  className="border border-[#e5e5e5] bg-white p-5"
+                  key={f.title}
+                  className="rounded-2xl border border-[var(--cv-border)] bg-white p-5 shadow-[var(--cv-shadow-sm)]"
                 >
-                  <h3 className="text-base font-medium">{item.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-[#404040]">
-                    {item.body}
+                  <h3 className="text-sm font-semibold text-[var(--cv-fg)]">{f.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-[var(--cv-fg-secondary)]">
+                    {f.body}
                   </p>
                 </article>
               ))}
@@ -151,105 +157,86 @@ export default function HomePage() {
           </Container>
         </section>
 
-        <section id="how-it-works" className="border-b border-[#e5e5e5] bg-white">
+        <section id="channels" className="border-b border-[var(--cv-border)] bg-white">
           <Container className="py-16 md:py-20">
-            <p className="text-sm tracking-[0.16em] text-[#525252]">
-              HOW IT WORKS
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--cv-accent)]">
+              Channels
             </p>
-            <h2 className="mt-3 text-3xl tracking-tight">
-              From channel event to agent reply.
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight">
+              One engine. Every channel.
             </h2>
-            <ol className="mt-10 grid gap-6 md:grid-cols-3">
-              {[
-                {
-                  step: "01",
-                  title: "Connect channels",
-                  body: "Install Web Chat on your site or connect WhatsApp, Facebook, and Instagram with encrypted credentials.",
-                },
-                {
-                  step: "02",
-                  title: "Conversations normalize",
-                  body: "Inbound messages resolve to organization-owned customers and threads in the shared conversation engine.",
-                },
-                {
-                  step: "03",
-                  title: "Team works the inbox",
-                  body: "Agents assign, reply, tag, automate, and use AI suggestions—with analytics on what actually happened.",
-                },
-              ].map((s) => (
-                <li key={s.step} className="border border-[#e5e5e5] p-5">
-                  <p className="text-xs tracking-[0.14em] text-[#525252]">
-                    {s.step}
-                  </p>
-                  <h3 className="mt-2 text-base font-medium">{s.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-[#404040]">
-                    {s.body}
-                  </p>
-                </li>
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {channels.map((c) => (
+                <div
+                  key={c.name}
+                  className="rounded-2xl border border-[var(--cv-border)] bg-[var(--cv-surface-muted)] px-4 py-5"
+                >
+                  <p className="font-semibold text-[var(--cv-fg)]">{c.name}</p>
+                  <p className="mt-1 text-xs text-[var(--cv-fg-muted)]">{c.desc}</p>
+                </div>
               ))}
-            </ol>
+            </div>
           </Container>
         </section>
 
-        <section id="security" className="border-b border-[#e5e5e5] bg-[#fafafa]">
+        <section id="pricing" className="border-b border-[var(--cv-border)] bg-[var(--cv-surface-muted)]">
           <Container className="py-16 md:py-20">
-            <p className="text-sm tracking-[0.16em] text-[#525252]">SECURITY</p>
-            <h2 className="mt-3 max-w-2xl text-3xl tracking-tight">
-              Multi-tenant isolation is not optional.
-            </h2>
-            <ul className="mt-8 grid gap-4 text-sm leading-6 text-[#404040] md:grid-cols-2">
-              <li className="border border-[#e5e5e5] bg-white p-4">
-                Organization-scoped data with server-side authorization and
-                role-based access (Owner, Admin, Agent).
-              </li>
-              <li className="border border-[#e5e5e5] bg-white p-4">
-                Channel credentials encrypted at rest; webhooks verified with
-                provider signatures.
-              </li>
-              <li className="border border-[#e5e5e5] bg-white p-4">
-                Opaque server-side sessions, HTTP-only cookies, and audit events
-                for sensitive operations.
-              </li>
-              <li className="border border-[#e5e5e5] bg-white p-4">
-                Billing entitlements enforced on the server—never client-side
-                plan checks.
-              </li>
-            </ul>
-          </Container>
-        </section>
-
-        <section id="pricing" className="border-b border-[#e5e5e5] bg-white">
-          <Container className="py-16 md:py-20">
-            <p className="text-sm tracking-[0.16em] text-[#525252]">PRICING</p>
-            <h2 className="mt-3 text-3xl tracking-tight">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--cv-accent)]">
+              Pricing
+            </p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight">
               Simple plans. Real entitlements.
             </h2>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-[#525252]">
-              Start with a 90-day free trial at Premium-level access. Yearly billing
-              includes a 20% discount.
+            <p className="mt-2 max-w-lg text-sm text-[var(--cv-fg-muted)]">
+              90-day free trial at Premium-level access. Yearly billing includes 20% off.
             </p>
             <div className="mt-10 grid gap-6 md:grid-cols-2">
-              {plans.map((plan) => (
+              {[
+                {
+                  name: "Starter",
+                  price: "₦6,799",
+                  yearly: "₦65,270 / year",
+                  items: [
+                    "Web Chat & Facebook Messenger",
+                    "AI with monthly allowance",
+                    "Customers & shared inbox",
+                  ],
+                },
+                {
+                  name: "Premium",
+                  price: "₦15,999",
+                  yearly: "₦153,590 / year",
+                  items: [
+                    "WhatsApp & Instagram",
+                    "Higher AI allowance",
+                    "Automations & advanced analytics",
+                  ],
+                },
+              ].map((plan) => (
                 <article
                   key={plan.name}
-                  className="flex flex-col border border-[#e5e5e5] p-6"
+                  className="flex flex-col rounded-2xl border border-[var(--cv-border)] bg-white p-6 shadow-[var(--cv-shadow-sm)]"
                 >
-                  <h3 className="text-lg font-medium">{plan.name}</h3>
-                  <p className="mt-3 text-3xl tracking-tight">
+                  <h3 className="text-lg font-semibold">{plan.name}</h3>
+                  <p className="mt-3 text-3xl font-semibold tracking-tight">
                     {plan.price}
-                    <span className="text-base text-[#525252]">
-                      {plan.period}
+                    <span className="text-base font-normal text-[var(--cv-fg-muted)]">
+                      {" "}
+                      / month
                     </span>
                   </p>
-                  <p className="mt-1 text-sm text-[#525252]">{plan.yearly}</p>
-                  <ul className="mt-6 flex-1 space-y-2 text-sm text-[#404040]">
+                  <p className="mt-1 text-sm text-[var(--cv-fg-muted)]">{plan.yearly}</p>
+                  <ul className="mt-6 flex-1 space-y-2 text-sm text-[var(--cv-fg-secondary)]">
                     {plan.items.map((item) => (
-                      <li key={item}>· {item}</li>
+                      <li key={item} className="flex gap-2">
+                        <span className="text-[var(--cv-accent)]">✓</span>
+                        {item}
+                      </li>
                     ))}
                   </ul>
                   <Link
                     href="/register"
-                    className="mt-8 inline-flex items-center justify-center bg-[#0a0a0a] px-4 py-2.5 text-sm text-white hover:bg-[#262626]"
+                    className="mt-8 inline-flex items-center justify-center rounded-xl bg-[var(--cv-accent)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--cv-accent-hover)]"
                   >
                     Get started
                   </Link>
@@ -259,25 +246,24 @@ export default function HomePage() {
           </Container>
         </section>
 
-        <section className="bg-[#0a0a0a]">
+        <section className="bg-[var(--cv-sidebar)]">
           <Container className="py-16 text-center md:py-20">
-            <h2 className="text-3xl tracking-tight text-white">
+            <h2 className="text-3xl font-semibold tracking-tight text-white">
               Put every customer conversation in one place.
             </h2>
-            <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-white/80">
-              Create an organization, invite your team, connect a channel, and
-              start working from a shared inbox.
+            <p className="mx-auto mt-3 max-w-lg text-sm text-slate-400">
+              Create an organization, connect a channel, and work from a shared inbox.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Link
                 href="/register"
-                className="inline-flex items-center bg-white px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#f5f5f5]"
+                className="inline-flex rounded-xl bg-[var(--cv-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--cv-accent-hover)]"
               >
                 Start free trial
               </Link>
               <Link
                 href="/login"
-                className="inline-flex items-center border border-white/40 px-4 py-2.5 text-sm text-white hover:bg-white/10"
+                className="inline-flex rounded-xl border border-white/15 px-5 py-2.5 text-sm font-medium text-white hover:bg-white/5"
               >
                 Sign in
               </Link>

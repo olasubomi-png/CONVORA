@@ -12,15 +12,16 @@ export function Input({ label, error, id, className, ...props }: InputProps) {
     <div className="space-y-1.5">
       <label
         htmlFor={inputId}
-        className="block text-sm font-medium text-[#0a0a0a]"
+        className="block text-sm font-medium text-[var(--cv-fg)]"
       >
         {label}
       </label>
       <input
         id={inputId}
         className={cn(
-          "w-full border border-[#e5e5e5] bg-white px-3 py-2.5 text-sm text-[#0a0a0a] placeholder:text-[#a3a3a3] transition-colors focus:border-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a] disabled:bg-[#fafafa] disabled:opacity-60",
-          error && "border-[#b91c1c] focus:border-[#b91c1c] focus:ring-[#b91c1c]",
+          "w-full rounded-xl border border-[var(--cv-border)] bg-white px-3.5 py-2.5 text-sm text-[var(--cv-fg)] placeholder:text-[var(--cv-fg-subtle)] shadow-sm transition-colors focus:border-[var(--cv-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--cv-accent-ring)] disabled:bg-[var(--cv-surface-muted)] disabled:opacity-60",
+          error &&
+            "border-[var(--cv-danger)] focus:border-[var(--cv-danger)] focus:ring-red-200",
           className,
         )}
         aria-invalid={error ? true : undefined}
@@ -28,7 +29,11 @@ export function Input({ label, error, id, className, ...props }: InputProps) {
         {...props}
       />
       {error ? (
-        <p id={`${inputId}-error`} className="text-sm text-[#b91c1c]" role="alert">
+        <p
+          id={`${inputId}-error`}
+          className="text-sm text-[var(--cv-danger)]"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}

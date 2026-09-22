@@ -8,7 +8,7 @@ describe("public landing copy", () => {
     expect(src).not.toMatch(/Phase 0/i);
     expect(src).not.toMatch(/not available yet/i);
     expect(src).not.toMatch(/Engineering foundation only/i);
-    expect(src).toMatch(/Every customer conversation\. One workspace\.|One inbox for every customer conversation/i);
+    expect(src).toMatch(/Every customer conversation\. One workspace/i);
     expect(src).toMatch(/WhatsApp/);
     expect(src).toMatch(/Start free trial/);
     expect(src).toMatch(/90-day/i);
