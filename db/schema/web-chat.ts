@@ -8,7 +8,9 @@ import {
   index,
   uniqueIndex,
   foreignKey,
+  boolean,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { organizations } from "./organizations";
 import { customers } from "./customers";
 import { conversations } from "./conversations";
@@ -32,6 +34,11 @@ export const webChatInstallations = pgTable(
     publicKey: text("public_key").notNull(),
     name: text("name").notNull(),
     status: webChatInstallationStatusEnum("status").notNull().default("ACTIVE"),
+    /**
+     * At most one default installation per organization (managed Profile Chat).
+     * Enforced by partial unique index web_chat_installations_org_default_unique.
+     */
+    isDefault: boolean("is_default").notNull().default(false),
     allowedOrigins: jsonb("allowed_origins").$type<string[]>().notNull().default([]),
     config: jsonb("config")
       .$type<{
@@ -57,6 +64,9 @@ export const webChatInstallations = pgTable(
       t.organizationId,
       t.id,
     ),
+    uniqueIndex("web_chat_installations_org_default_unique")
+      .on(t.organizationId)
+      .where(sql`${t.isDefault} = true`),
   ],
 );
 

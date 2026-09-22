@@ -19,6 +19,86 @@ export type InstallationConfig = {
   headerText?: string;
 };
 
+
+export const DEFAULT_WEB_CHAT_NAME = "Profile Chat";
+
+/**
+ * Idempotently ensure the organization has exactly one default ACTIVE Web Chat
+ * installation for the public CONVORA profile. Safe under concurrent calls via
+ * the partial unique index on is_default.
+ */
+export async function ensureDefaultWebChatInstallation(
+  organizationId: string,
+  options?: {
+    displayName?: string;
+    actorUserId?: string | null;
+    executor?: ReturnType<typeof getDatabase>;
+  },
+) {
+  const db = options?.executor ?? getDatabase();
+
+  const existing = await db
+    .select()
+    .from(webChatInstallations)
+    .where(
+      and(
+        eq(webChatInstallations.organizationId, organizationId),
+        eq(webChatInstallations.isDefault, true),
+      ),
+    )
+    .limit(1);
+  if (existing[0]) {
+    return existing[0];
+  }
+
+  const displayName = options?.displayName?.trim() || "CONVORA";
+  try {
+    const [row] = await db
+      .insert(webChatInstallations)
+      .values({
+        organizationId,
+        publicKey: generatePublicKey(),
+        name: DEFAULT_WEB_CHAT_NAME,
+        status: "ACTIVE",
+        isDefault: true,
+        allowedOrigins: [],
+        config: {
+          displayName,
+          welcomeMessage:
+            "Hi! Send a message and we will get back to you here.",
+          headerText: displayName,
+        },
+      })
+      .returning();
+    if (!row) {
+      throw new Error("Failed to create default Web Chat installation");
+    }
+
+    if (options?.actorUserId && !options?.executor) {
+      await recordAuditEvent({
+        eventType: "WEB_CHAT_INSTALLATION_CREATED",
+        actorUserId: options.actorUserId,
+        organizationId,
+        payload: { installationId: row.id, isDefault: true },
+      });
+    }
+    return row;
+  } catch (error) {
+    const again = await db
+      .select()
+      .from(webChatInstallations)
+      .where(
+        and(
+          eq(webChatInstallations.organizationId, organizationId),
+          eq(webChatInstallations.isDefault, true),
+        ),
+      )
+      .limit(1);
+    if (again[0]) return again[0];
+    throw error;
+  }
+}
+
 export async function createInstallation(
   actorUserId: string,
   organizationId: string,

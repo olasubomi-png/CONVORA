@@ -5,6 +5,7 @@ import { createOrganizationWithOwner } from "@/lib/orgs/create";
 import { upsertOrganizationProfile } from "@/lib/profiles/organization";
 import {
   createInstallation,
+  listInstallations,
   updateInstallation,
 } from "@/lib/web-chat/installations";
 import { getPublicWebChatEmbedByOrgSlug } from "@/lib/web-chat/public-embed";
@@ -29,14 +30,14 @@ async function seedUser(email: string) {
 }
 
 describe("public web chat embed", () => {
-  it("returns embed only when public profile + ACTIVE installation", async () => {
+  it("returns embed when public profile exists (default Web Chat auto-provisioned)", async () => {
     const owner = await seedUser("embed@example.com");
     const org = await createOrganizationWithOwner(owner.id, {
       name: "Ola Autos",
       slug: "ola-autos",
     });
 
-    // No profile + no install
+    // No public profile yet
     expect(await getPublicWebChatEmbedByOrgSlug("ola-autos")).toBeNull();
 
     await upsertOrganizationProfile(owner.id, org.organizationId, {
@@ -45,27 +46,25 @@ describe("public web chat embed", () => {
       visibility: "PUBLIC",
     });
 
-    // Public profile but no web chat
-    expect(await getPublicWebChatEmbedByOrgSlug("ola-autos")).toBeNull();
+    // Managed default Profile Chat is available immediately
+    const embed = await getPublicWebChatEmbedByOrgSlug("ola-autos");
+    expect(embed).not.toBeNull();
+    expect(embed!.publicKey).toMatch(/^wc_/);
+    expect(JSON.stringify(embed)).not.toMatch(/organizationId/);
 
-    const installation = await createInstallation(owner.id, org.organizationId, {
+    // Additional installations do not break default preference
+    await createInstallation(owner.id, org.organizationId, {
       name: "Site chat",
       config: {
         displayName: "Ola Support",
         welcomeMessage: "How can we help?",
       },
     });
-
-    const embed = await getPublicWebChatEmbedByOrgSlug("ola-autos");
-    expect(embed).not.toBeNull();
-    expect(embed!.publicKey).toBe(installation.publicKey);
-    expect(embed!.displayName).toBe("Ola Support");
-    expect(embed!.welcomeMessage).toBe("How can we help?");
-    // No internal IDs leaked
-    expect(JSON.stringify(embed)).not.toMatch(/organizationId/);
+    const again = await getPublicWebChatEmbedByOrgSlug("ola-autos");
+    expect(again?.publicKey).toBe(embed!.publicKey);
   });
 
-  it("hides embed when installation is DISABLED", async () => {
+  it("hides embed when the default installation is DISABLED", async () => {
     const owner = await seedUser("embed2@example.com");
     const org = await createOrganizationWithOwner(owner.id, {
       name: "Shop",
@@ -75,10 +74,12 @@ describe("public web chat embed", () => {
       displayName: "Shop",
       visibility: "PUBLIC",
     });
-    const installation = await createInstallation(owner.id, org.organizationId, {
-      name: "Main",
+    const installations = await listInstallations(owner.id, org.organizationId);
+    const defaultInstall = installations.find((i) => i.isDefault) ?? installations[0];
+    expect(defaultInstall).toBeTruthy();
+    await updateInstallation(owner.id, defaultInstall!.id, {
+      status: "DISABLED",
     });
-    await updateInstallation(owner.id, installation.id, { status: "DISABLED" });
 
     expect(await getPublicWebChatEmbedByOrgSlug("shop-co")).toBeNull();
   });
@@ -93,7 +94,6 @@ describe("public web chat embed", () => {
       displayName: "Private Co",
       visibility: "PRIVATE",
     });
-    await createInstallation(owner.id, org.organizationId, { name: "Main" });
 
     expect(await getPublicWebChatEmbedByOrgSlug("private-co")).toBeNull();
   });
@@ -113,12 +113,12 @@ describe("public web chat embed", () => {
       displayName: "A",
       visibility: "PUBLIC",
     });
-    const instA = await createInstallation(a.id, orgA.organizationId, {
-      name: "A chat",
-    });
 
+    const listA = await listInstallations(a.id, orgA.organizationId);
+    const defaultA = listA.find((i) => i.isDefault) ?? listA[0];
     const embedA = await getPublicWebChatEmbedByOrgSlug("org-a-embed");
-    expect(embedA?.publicKey).toBe(instA.publicKey);
+    expect(embedA?.publicKey).toBe(defaultA?.publicKey);
+    // B has no public profile
     expect(await getPublicWebChatEmbedByOrgSlug("org-b-embed")).toBeNull();
     expect(await getPublicWebChatEmbedByOrgSlug("missing-slug")).toBeNull();
   });

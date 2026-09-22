@@ -11,41 +11,15 @@ import { Badge } from "@/components/ui/badge";
 
 export const metadata = { title: "Channels — CONVORA" };
 
-const CHANNEL_CARDS = [
-  {
-    key: "WHATSAPP",
-    title: "WhatsApp",
-    body: "Customers message your WhatsApp as usual. Conversations appear in CONVORA.",
-    href: "/app/settings/whatsapp",
-    match: (ch: string, provider: string) =>
-      ch.includes("WHATSAPP") || provider.includes("whatsapp"),
-  },
-  {
-    key: "FACEBOOK",
-    title: "Facebook Messenger",
-    body: "Receive Messenger conversations in your shared inbox.",
-    href: "/app/settings/facebook",
-    match: (ch: string, provider: string) =>
-      ch.includes("FACEBOOK") ||
-      ch.includes("MESSENGER") ||
-      provider.includes("facebook"),
-  },
-  {
-    key: "INSTAGRAM",
-    title: "Instagram",
-    body: "Bring Instagram messaging into CONVORA when connected.",
-    href: "/app/settings/instagram",
-    match: (ch: string, provider: string) =>
-      ch.includes("INSTAGRAM") || provider.includes("instagram"),
-  },
-  {
-    key: "WEB_CHAT",
-    title: "Web Chat",
-    body: "Add CONVORA chat to your website so visitors can reach you instantly.",
-    href: "/app/settings/web-chat",
-    match: () => false,
-  },
-] as const;
+type ChannelStatus = {
+  key: string;
+  title: string;
+  description: string;
+  href: string;
+  statusLabel: string;
+  tone: "success" | "neutral" | "warning";
+  actionLabel: string;
+};
 
 export default async function ChannelsPage() {
   const auth = await requireAuthenticatedUser();
@@ -58,70 +32,121 @@ export default async function ChannelsPage() {
     listWebChat(auth.user.id, primary.organizationId),
   ]);
 
-  function statusFor(card: (typeof CHANNEL_CARDS)[number]): {
-    connected: boolean;
-    label: string;
-  } {
-    if (card.key === "WEB_CHAT") {
-      const active = webChat.some((w) => w.status === "ACTIVE");
-      return {
-        connected: active,
-        label: active ? "Connected" : "Not connected",
-      };
-    }
+  const anyActiveWeb = webChat.some((w) => w.status === "ACTIVE");
+
+  function metaStatus(
+    match: (ch: string, provider: string) => boolean,
+  ): { label: string; tone: "success" | "neutral" | "warning" } {
     const hit = installations.find(
       (i) =>
         i.status === "ACTIVE" &&
-        card.match(i.channel.toUpperCase(), i.provider.toUpperCase()),
+        match(i.channel.toUpperCase(), i.provider.toUpperCase()),
     );
-    return {
-      connected: Boolean(hit),
-      label: hit ? "Connected" : "Not connected",
-    };
+    if (hit) return { label: "Connected", tone: "success" };
+    const pending = installations.find(
+      (i) =>
+        i.status !== "ACTIVE" &&
+        match(i.channel.toUpperCase(), i.provider.toUpperCase()),
+    );
+    if (pending) return { label: "Needs authorization", tone: "warning" };
+    return { label: "Not connected", tone: "neutral" };
   }
+
+  const wa = metaStatus(
+    (ch, provider) => ch.includes("WHATSAPP") || provider.includes("WHATSAPP"),
+  );
+  const fb = metaStatus(
+    (ch, provider) =>
+      ch.includes("FACEBOOK") ||
+      ch.includes("MESSENGER") ||
+      provider.includes("FACEBOOK"),
+  );
+  const ig = metaStatus(
+    (ch, provider) =>
+      ch.includes("INSTAGRAM") || provider.includes("INSTAGRAM"),
+  );
+
+  const cards: ChannelStatus[] = [
+    {
+      key: "WEB_CHAT",
+      title: "Web Chat",
+      description:
+        "Built into your CONVORA profile. Customers can message you from your public page without creating an account.",
+      href: "/app/settings/web-chat",
+      statusLabel: anyActiveWeb ? "Ready" : "Provisioning",
+      tone: anyActiveWeb ? "success" : "warning",
+      actionLabel: anyActiveWeb ? "View details" : "Retry setup",
+    },
+    {
+      key: "WHATSAPP",
+      title: "WhatsApp",
+      description:
+        "Authorize your WhatsApp Business account. CONVORA manages webhooks and delivery—you never paste API keys.",
+      href: "/app/settings/whatsapp",
+      statusLabel: wa.label,
+      tone: wa.tone,
+      actionLabel: wa.label === "Connected" ? "Manage" : "Connect WhatsApp",
+    },
+    {
+      key: "FACEBOOK",
+      title: "Facebook Messenger",
+      description:
+        "Authorize a Facebook Page. Messenger conversations appear in your shared inbox.",
+      href: "/app/settings/facebook",
+      statusLabel: fb.label,
+      tone: fb.tone,
+      actionLabel:
+        fb.label === "Connected" ? "Manage" : "Connect Messenger",
+    },
+    {
+      key: "INSTAGRAM",
+      title: "Instagram",
+      description:
+        "Authorize an eligible Instagram professional account. Direct messages land in CONVORA.",
+      href: "/app/settings/instagram",
+      statusLabel: ig.label,
+      tone: ig.tone,
+      actionLabel: ig.label === "Connected" ? "Manage" : "Connect Instagram",
+    },
+  ];
 
   return (
     <Container className="py-8 lg:py-10">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--cv-fg-muted)]">
-        Channels
+        Communication channels
       </p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-        Connect your customers
+        How customers reach you
       </h1>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--cv-fg-muted)]">
-        Let people message you where they already spend time. Their
-        conversations land in your CONVORA inbox—they never need a CONVORA
-        account.
+        Web Chat is included with every CONVORA. Connect WhatsApp, Messenger, or
+        Instagram when you are ready—authorization only, no technical setup.
+        Every conversation lands in one inbox.
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
-        {CHANNEL_CARDS.map((card) => {
-          const st = statusFor(card);
-          return (
-            <article
-              key={card.key}
-              className="flex flex-col rounded-2xl border border-[var(--cv-border)] bg-white p-5 shadow-[var(--cv-shadow-sm)]"
+        {cards.map((card) => (
+          <article
+            key={card.key}
+            className="flex flex-col rounded-2xl border border-[var(--cv-border)] bg-white p-5 shadow-[var(--cv-shadow-sm)]"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <h2 className="text-base font-semibold text-[var(--cv-fg)]">
+                {card.title}
+              </h2>
+              <Badge tone={card.tone}>{card.statusLabel}</Badge>
+            </div>
+            <p className="mt-2 flex-1 text-sm leading-6 text-[var(--cv-fg-secondary)]">
+              {card.description}
+            </p>
+            <Link
+              href={card.href}
+              className="mt-4 inline-flex rounded-xl bg-[var(--cv-accent)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--cv-accent-hover)]"
             >
-              <div className="flex items-start justify-between gap-2">
-                <h2 className="text-base font-semibold text-[var(--cv-fg)]">
-                  {card.title}
-                </h2>
-                <Badge tone={st.connected ? "success" : "neutral"}>
-                  {st.label}
-                </Badge>
-              </div>
-              <p className="mt-2 flex-1 text-sm leading-6 text-[var(--cv-fg-secondary)]">
-                {card.body}
-              </p>
-              <Link
-                href={card.href}
-                className="mt-4 inline-flex rounded-xl bg-[var(--cv-accent)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--cv-accent-hover)]"
-              >
-                {st.connected ? "Manage" : `Connect ${card.title.split(" ")[0]}`}
-              </Link>
-            </article>
-          );
-        })}
+              {card.actionLabel}
+            </Link>
+          </article>
+        ))}
       </div>
     </Container>
   );

@@ -35,15 +35,20 @@ export default async function WhatsAppSettingsPage() {
 
   return (
     <Container className="py-10">
-      <h1 className="text-2xl tracking-tight">WhatsApp Cloud API</h1>
+      <h1 className="text-2xl tracking-tight">WhatsApp</h1>
       <p className="mt-1 text-sm text-[#5c5c5c]">
-        Connect a WhatsApp Business phone number. Messages appear in the shared inbox.
+        Authorize your WhatsApp Business account. CONVORA manages delivery and
+        webhooks. Conversations appear in your shared inbox—customers never need a
+        CONVORA account.
       </p>
       <div className="mt-8">
         <WhatsAppSettings
           organizationId={primary.organizationId}
           installations={installations}
           webhookUrl={`${process.env.APP_URL ?? ""}/api/webhooks/whatsapp`}
+          metaConnectAvailable={Boolean(
+            process.env.META_APP_ID ?? process.env.WHATSAPP_META_APP_ID,
+          )}
         />
       </div>
     </Container>

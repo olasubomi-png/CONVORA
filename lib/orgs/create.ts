@@ -11,6 +11,7 @@ import {
   subscriptionEvents,
 } from "@/db/schema";
 import { TRIAL_DURATION_DAYS, TRIAL_DURATION_MS } from "@/lib/billing/constants";
+import { ensureDefaultWebChatInstallation } from "@/lib/web-chat/installations";
 
 /**
  * Create an organization, OWNER membership, and 90-day Premium trial
@@ -107,6 +108,11 @@ export async function createOrganizationWithOwner(
     actorUserId: userId,
     organizationId: result.organizationId,
     payload: { slug: input.slug, name: input.name },
+  });
+
+  await ensureDefaultWebChatInstallation(result.organizationId, {
+    displayName: input.name,
+    actorUserId: userId,
   });
 
   return result;

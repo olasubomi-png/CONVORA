@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDatabase } from "@/db";
 import {
   organizations,
@@ -57,6 +57,7 @@ export async function getPublicWebChatEmbedByOrgSlug(
         eq(webChatInstallations.status, "ACTIVE"),
       ),
     )
+    .orderBy(desc(webChatInstallations.isDefault))
     .limit(1);
 
   const row = rows[0];

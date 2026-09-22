@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 type Installation = {
   id: string;
@@ -12,130 +11,96 @@ type Installation = {
   channel: string;
 };
 
+/**
+ * Agent-facing WhatsApp panel. Never displays tokens or webhook secrets.
+ */
 export function WhatsAppSettings({
   organizationId,
   installations: initial,
   webhookUrl,
+  metaConnectAvailable = false,
 }: {
   organizationId: string;
   installations: Installation[];
   webhookUrl: string;
+  metaConnectAvailable?: boolean;
 }) {
-  const [installations, setInstallations] = useState(initial);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-  const router = useRouter();
-  const [form, setForm] = useState({
-    displayName: "WhatsApp Business",
-    accessToken: "",
-    appSecret: "",
-    verifyToken: "",
-    phoneNumberId: "",
-  });
-
-  function create() {
-    setError(null);
-    startTransition(async () => {
-      const res = await fetch("/api/channels/whatsapp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          organizationId,
-          displayName: form.displayName,
-          credentials: {
-            accessToken: form.accessToken,
-            appSecret: form.appSecret,
-            verifyToken: form.verifyToken,
-            phoneNumberId: form.phoneNumberId,
-          },
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error?.message ?? "Failed to connect WhatsApp");
-        return;
-      }
-      setInstallations((prev) => [...prev, data.installation]);
-      setForm((f) => ({
-        ...f,
-        accessToken: "",
-        appSecret: "",
-        verifyToken: "",
-      }));
-      router.refresh();
-    });
-  }
+  const [installations] = useState(initial);
+  const [error] = useState<string | null>(null);
+  const active = installations.filter((i) => i.status === "ACTIVE");
 
   return (
     <div className="space-y-8">
-      <div className="border border-[#e4e4e2] bg-white p-5 text-sm">
-        <h2 className="font-medium">Webhook URL</h2>
-        <code className="mt-2 block break-all bg-[#f8f8f7] p-2 text-xs">
-          {webhookUrl || "/api/webhooks/whatsapp"}
-        </code>
-        <p className="mt-2 text-xs text-[#5c5c5c]">
-          Configure this URL in Meta Developer Console. Verify token is never shown
-          after save.
+      <div className="rounded-2xl border border-[var(--cv-border)] bg-white p-5 text-sm shadow-[var(--cv-shadow-sm)]">
+        <h2 className="font-semibold text-[var(--cv-fg)]">Connection status</h2>
+        <p className="mt-2 leading-6 text-[var(--cv-fg-secondary)]">
+          CONVORA owns webhook registration and message delivery. You only
+          authorize the WhatsApp Business account Meta requires—never paste API
+          keys or Graph URLs.
         </p>
+        {active.length === 0 ? (
+          <p className="mt-4 text-sm text-[var(--cv-fg-muted)]">
+            Status:{" "}
+            <span className="font-medium text-[var(--cv-fg)]">Not connected</span>
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {active.map((i) => (
+              <li
+                key={i.id}
+                className="rounded-xl border border-[var(--cv-border)] px-3 py-2"
+              >
+                <p className="font-medium text-[var(--cv-fg)]">{i.displayName}</p>
+                <p className="text-xs text-[var(--cv-fg-muted)]">
+                  Connected · {i.channel}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
-      {installations.map((i) => {
-        const phone = (i.publicConfig as { phoneNumberId?: string })
-          .phoneNumberId;
-        return (
-          <div key={i.id} className="border border-[#e4e4e2] bg-white p-5">
-            <h2 className="font-medium">{i.displayName}</h2>
-            <p className="mt-1 text-xs text-[#5c5c5c]">
-              Status: {i.status}
-              {phone ? ` · Phone number ID: ${phone}` : ""}
+      {active.length === 0 ? (
+        <div className="rounded-2xl border border-[var(--cv-border)] bg-white p-5 text-sm shadow-[var(--cv-shadow-sm)]">
+          <h2 className="font-semibold text-[var(--cv-fg)]">Connect WhatsApp</h2>
+          {metaConnectAvailable ? (
+            <>
+              <p className="mt-2 leading-6 text-[var(--cv-fg-secondary)]">
+                Continue with Meta to authorize your WhatsApp Business account.
+                CONVORA stores credentials securely and routes messages to your
+                inbox.
+              </p>
+              <a
+                href={`/api/channels/whatsapp/oauth/start?organizationId=${encodeURIComponent(organizationId)}`}
+                className="mt-4 inline-flex rounded-xl bg-[var(--cv-accent)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--cv-accent-hover)]"
+              >
+                Authorize with Meta
+              </a>
+            </>
+          ) : (
+            <p className="mt-2 leading-6 text-[var(--cv-fg-secondary)]">
+              WhatsApp authorization will be available once the CONVORA platform
+              Meta application is configured by your operator. Agents never enter
+              access tokens or webhook secrets.
             </p>
-          </div>
-        );
-      })}
-
-      <div className="border border-[#e4e4e2] bg-white p-5">
-        <h2 className="font-medium">Connect WhatsApp</h2>
-        <div className="mt-4 grid gap-3 text-sm">
-          {(
-            [
-              ["displayName", "Display name"],
-              ["phoneNumberId", "Phone number ID"],
-              ["accessToken", "Access token"],
-              ["appSecret", "App secret"],
-              ["verifyToken", "Webhook verify token"],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="block">
-              <span className="text-xs text-[#5c5c5c]">{label}</span>
-              <input
-                type={
-                  key === "accessToken" || key === "appSecret"
-                    ? "password"
-                    : "text"
-                }
-                className="mt-1 w-full border border-[#e4e4e2] px-3 py-2"
-                value={form[key]}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, [key]: e.target.value }))
-                }
-                autoComplete="off"
-              />
-            </label>
-          ))}
+          )}
+          {error ? (
+            <p className="mt-3 text-sm text-red-600" role="alert">
+              {error}
+            </p>
+          ) : null}
         </div>
-        {error ? (
-          <p className="mt-3 text-sm text-red-700" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <button
-          type="button"
-          onClick={create}
-          disabled={pending}
-          className="mt-4 border border-[#141414] bg-[#141414] px-4 py-2 text-sm text-white disabled:opacity-50"
-        >
-          Save connection
-        </button>
+      ) : null}
+
+      <div className="rounded-2xl border border-dashed border-[var(--cv-border)] bg-[var(--cv-bg)] p-4 text-xs text-[var(--cv-fg-muted)]">
+        <p className="font-medium text-[var(--cv-fg-secondary)]">Platform webhook</p>
+        <code className="mt-1 block break-all">
+          {webhookUrl || "/api/webhooks/whatsapp"}
+        </code>
+        <p className="mt-2">
+          Managed by CONVORA. Shown for support only—not required for agents to
+          configure.
+        </p>
       </div>
     </div>
   );

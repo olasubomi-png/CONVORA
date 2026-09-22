@@ -10,6 +10,7 @@ import { toPublicError } from "@/lib/errors";
 import { parseInput } from "@/lib/validation";
 import { z } from "zod";
 import { normalizeSlug, isValidSlug } from "@/lib/orgs/slug";
+import { ensureDefaultWebChatInstallation } from "@/lib/web-chat/installations";
 
 const onboardingSchema = z.object({
   displayName: z
@@ -65,6 +66,11 @@ export async function completeOnboardingAction(
       displayName: input.displayName,
       description: input.description || null,
       visibility: "PUBLIC",
+    });
+
+    await ensureDefaultWebChatInstallation(org.organizationId, {
+      displayName: input.displayName,
+      actorUserId: auth.user.id,
     });
 
     redirect(`/app/onboarding/ready?slug=${encodeURIComponent(input.slug)}`);
