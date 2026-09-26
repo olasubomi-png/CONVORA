@@ -361,6 +361,7 @@ Server-only environment variables (never expose to the browser):
 | --- | --- |
 | `META_APP_ID` | Meta app id for OAuth |
 | `META_APP_SECRET` | Meta app secret (token exchange + webhook signatures) |
+| `META_LOGIN_CONFIG_ID` | Facebook Login for Business configuration ID (OAuth) |
 | `META_REDIRECT_URI` | Optional; defaults to `{APP_URL}/api/channels/meta/oauth/callback` |
 | `META_WEBHOOK_VERIFY_TOKEN` | Shared verify token for Meta webhook challenges |
 

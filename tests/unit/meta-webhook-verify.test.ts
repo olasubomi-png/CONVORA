@@ -5,12 +5,14 @@ describe("Meta webhook challenge verification", () => {
   beforeEach(() => {
     delete process.env.META_APP_ID;
     delete process.env.META_APP_SECRET;
+    delete process.env.META_LOGIN_CONFIG_ID;
     delete process.env.META_WEBHOOK_VERIFY_TOKEN;
   });
 
   it("accepts platform verify token when Meta is configured", () => {
     process.env.META_APP_ID = "1234567890";
     process.env.META_APP_SECRET = "test_meta_app_secret_value";
+    process.env.META_LOGIN_CONFIG_ID = "login_cfg_test";
     process.env.APP_URL = "https://app.example.com";
     process.env.META_WEBHOOK_VERIFY_TOKEN = "platform_verify_token_xyz";
 
@@ -26,6 +28,7 @@ describe("Meta webhook challenge verification", () => {
   it("rejects wrong verify token", () => {
     process.env.META_APP_ID = "1234567890";
     process.env.META_APP_SECRET = "test_meta_app_secret_value";
+    process.env.META_LOGIN_CONFIG_ID = "login_cfg_test";
     process.env.APP_URL = "https://app.example.com";
     process.env.META_WEBHOOK_VERIFY_TOKEN = "platform_verify_token_xyz";
 

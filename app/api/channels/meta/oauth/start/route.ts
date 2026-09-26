@@ -6,6 +6,10 @@ import { isAdminRole } from "@/lib/authz/roles";
 import { isMetaPlatformConfigured } from "@/lib/channels/meta/platform-config";
 import { startMetaOAuth } from "@/lib/channels/meta/oauth";
 import type { MetaOAuthProvider } from "@/lib/channels/meta/platform-config";
+import {
+  META_OAUTH_COOKIE,
+  metaOAuthCookieOptions,
+} from "@/lib/channels/meta/oauth-state";
 import { jsonError } from "@/lib/api/response";
 import {
   AuthorizationError,
@@ -20,15 +24,17 @@ const PROVIDERS = new Set<MetaOAuthProvider>([
 ]);
 
 /**
- * Start Meta OAuth for a channel provider.
- * Returns a redirect to Meta, or 503 when platform Meta app is not configured.
+ * Start Meta OAuth (Facebook Login for Business).
+ * Sets a signed HTTP-only state cookie, then redirects to Meta.
  */
 export async function GET(request: Request) {
   try {
     const auth = await requireAuthenticatedUser();
     const url = new URL(request.url);
     const organizationId = url.searchParams.get("organizationId");
-    const provider = url.searchParams.get("provider") as MetaOAuthProvider | null;
+    const provider = url.searchParams.get(
+      "provider",
+    ) as MetaOAuthProvider | null;
 
     if (!organizationId) {
       throw new ValidationError("organizationId is required.");
@@ -47,17 +53,19 @@ export async function GET(request: Request) {
 
     if (!isMetaPlatformConfigured()) {
       throw new ConfigurationError(
-        "Meta connection is not configured yet. Set META_APP_ID and META_APP_SECRET.",
+        "Meta connection is not configured yet. Set META_APP_ID, META_APP_SECRET, and META_LOGIN_CONFIG_ID.",
       );
     }
 
-    const { authorizationUrl } = await startMetaOAuth({
+    const { authorizationUrl, state } = await startMetaOAuth({
       userId: auth.user.id,
       organizationId,
       provider,
     });
 
-    return NextResponse.redirect(authorizationUrl, 302);
+    const response = NextResponse.redirect(authorizationUrl, 302);
+    response.cookies.set(META_OAUTH_COOKIE, state, metaOAuthCookieOptions(600));
+    return response;
   } catch (error) {
     return jsonError(error);
   }

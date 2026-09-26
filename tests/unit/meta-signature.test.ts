@@ -53,6 +53,7 @@ describe("verifyPlatformMetaSignature", () => {
   beforeEach(() => {
     delete process.env.META_APP_ID;
     delete process.env.META_APP_SECRET;
+    delete process.env.META_LOGIN_CONFIG_ID;
   });
 
   it("is not required when Meta platform is unconfigured", () => {
@@ -64,6 +65,7 @@ describe("verifyPlatformMetaSignature", () => {
   it("requires and accepts valid platform signature", () => {
     process.env.META_APP_ID = "123";
     process.env.META_APP_SECRET = secret;
+    process.env.META_LOGIN_CONFIG_ID = "login_cfg_test";
     process.env.APP_URL = "https://app.example.com";
     expect(verifyPlatformMetaSignature(body, sign(body, secret))).toEqual({
       required: true,
@@ -74,6 +76,7 @@ describe("verifyPlatformMetaSignature", () => {
   it("requires and rejects invalid platform signature", () => {
     process.env.META_APP_ID = "123";
     process.env.META_APP_SECRET = secret;
+    process.env.META_LOGIN_CONFIG_ID = "login_cfg_test";
     process.env.APP_URL = "https://app.example.com";
     expect(
       verifyPlatformMetaSignature(body, sign(body, "other")),
