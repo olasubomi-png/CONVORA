@@ -1,10 +1,57 @@
 import type { AiProvider, AiTextRequest, AiTextResponse } from "@/lib/ai/types";
 import { ConfigurationError, AppError } from "@/lib/errors";
+import { logger } from "@/lib/observability/logger";
 
-/**
- * OpenAI Chat Completions adapter.
- * Uses fetch only — no SDK dependency required for Phase 5.
- */
+export type AiProviderErrorCategory =
+  | "AI_AUTHENTICATION_FAILED"
+  | "AI_RATE_LIMITED"
+  | "AI_MODEL_UNAVAILABLE"
+  | "AI_BAD_REQUEST"
+  | "AI_PROVIDER_UNAVAILABLE"
+  | "AI_EMPTY_RESPONSE"
+  | "AI_INVALID_RESPONSE";
+
+function classifyOpenAiHttpError(status: number): {
+  category: AiProviderErrorCategory;
+  message: string;
+  statusCode: number;
+} {
+  if (status === 401 || status === 403) {
+    return {
+      category: "AI_AUTHENTICATION_FAILED",
+      message:
+        "AI authentication failed. Check the OpenAI API configuration.",
+      statusCode: 502,
+    };
+  }
+  if (status === 429) {
+    return {
+      category: "AI_RATE_LIMITED",
+      message: "AI rate limit reached. Try again shortly.",
+      statusCode: 429,
+    };
+  }
+  if (status === 404) {
+    return {
+      category: "AI_MODEL_UNAVAILABLE",
+      message: "The configured AI model is unavailable.",
+      statusCode: 502,
+    };
+  }
+  if (status >= 400 && status < 500) {
+    return {
+      category: "AI_BAD_REQUEST",
+      message: "AI request was rejected. Try again with different input.",
+      statusCode: 502,
+    };
+  }
+  return {
+    category: "AI_PROVIDER_UNAVAILABLE",
+    message: "AI is temporarily unavailable. Try again shortly.",
+    statusCode: 502,
+  };
+}
+
 export class OpenAiProvider implements AiProvider {
   readonly name = "openai";
   readonly model: string;
@@ -12,7 +59,9 @@ export class OpenAiProvider implements AiProvider {
 
   constructor(apiKey: string, model: string) {
     if (!apiKey) {
-      throw new ConfigurationError("OPENAI_API_KEY is not configured.");
+      throw new ConfigurationError(
+        "AI is not configured yet. Set OPENAI_API_KEY.",
+      );
     }
     this.apiKey = apiKey;
     this.model = model;
@@ -41,33 +90,47 @@ export class OpenAiProvider implements AiProvider {
         }),
       });
     } catch (cause) {
+      logger.warn("ai_provider_network_failure", {
+        provider: "openai",
+        category: "AI_PROVIDER_UNAVAILABLE",
+      });
       throw new AppError(
         "INTERNAL_ERROR",
-        "AI provider request failed.",
+        "AI is temporarily unavailable. Try again shortly.",
         502,
         true,
-        { cause },
+        {
+          cause,
+          details: { category: "AI_PROVIDER_UNAVAILABLE" },
+        },
       );
     }
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
+      const classified = classifyOpenAiHttpError(response.status);
+      logger.warn("ai_provider_http_error", {
+        provider: "openai",
+        category: classified.category,
+        providerStatus: response.status,
+        // Safe truncated snippet only — never log secrets or full prompts
+        snippet: body.slice(0, 120).replace(/sk-[a-zA-Z0-9]+/g, "[redacted]"),
+      });
       throw new AppError(
         "INTERNAL_ERROR",
-        "AI provider returned an error.",
-        response.status === 429 ? 429 : 502,
+        classified.message,
+        classified.statusCode,
         true,
         {
           details: {
+            category: classified.category,
             providerStatus: response.status,
-            // Do not echo full provider body (may contain sensitive data)
-            snippet: body.slice(0, 200),
           },
         },
       );
     }
 
-    const data = (await response.json()) as {
+    let data: {
       choices?: { message?: { content?: string } }[];
       usage?: {
         prompt_tokens?: number;
@@ -76,14 +139,33 @@ export class OpenAiProvider implements AiProvider {
       };
       model?: string;
     };
+    try {
+      data = (await response.json()) as typeof data;
+    } catch (cause) {
+      logger.warn("ai_provider_invalid_json", {
+        provider: "openai",
+        category: "AI_INVALID_RESPONSE",
+      });
+      throw new AppError(
+        "INTERNAL_ERROR",
+        "AI returned an invalid response. Try again shortly.",
+        502,
+        true,
+        {
+          cause,
+          details: { category: "AI_INVALID_RESPONSE" },
+        },
+      );
+    }
 
     const text = data.choices?.[0]?.message?.content ?? "";
     if (!text) {
       throw new AppError(
         "INTERNAL_ERROR",
-        "AI provider returned an empty response.",
+        "AI returned an empty response. Try again shortly.",
         502,
         true,
+        { details: { category: "AI_EMPTY_RESPONSE" } },
       );
     }
 
@@ -102,3 +184,6 @@ export class OpenAiProvider implements AiProvider {
     };
   }
 }
+
+/** Exported for unit tests */
+export { classifyOpenAiHttpError };

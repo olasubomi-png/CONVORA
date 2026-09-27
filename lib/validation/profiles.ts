@@ -35,12 +35,29 @@ export const organizationProfileSchema = z.object({
   visibility: z.enum(["PUBLIC", "PRIVATE"]).optional(),
 });
 
-export const agentPostSchema = z.object({
-  body: z.string().trim().min(1).max(5000),
-  type: z.enum(["TEXT", "IMAGE", "VIDEO", "DOCUMENT", "LINK"]).default("TEXT"),
-  mediaUrl: z.string().url().optional().nullable().or(z.literal("")),
-  visibility: z.enum(["DRAFT", "PUBLIC", "ARCHIVED"]).optional(),
-});
+export const agentPostSchema = z
+  .object({
+    body: z.string().trim().max(5000).optional().default(""),
+    type: z.enum(["TEXT", "IMAGE", "VIDEO", "DOCUMENT", "LINK"]).default("TEXT"),
+    mediaUrl: z
+      .string()
+      .max(500)
+      .optional()
+      .nullable()
+      .or(z.literal(""))
+      .refine(
+        (v) =>
+          !v ||
+          v.startsWith("/api/media/") ||
+          v.startsWith("https://") ||
+          v.startsWith("http://"),
+        "Invalid media URL",
+      ),
+    visibility: z.enum(["DRAFT", "PUBLIC", "ARCHIVED"]).optional(),
+  })
+  .refine((v) => Boolean(v.body?.trim()) || Boolean(v.mediaUrl), {
+    message: "Post must include text and/or an image.",
+  });
 
 export const verificationUpdateSchema = z.object({
   status: z.enum(["UNVERIFIED", "PENDING", "VERIFIED", "SUSPENDED"]),

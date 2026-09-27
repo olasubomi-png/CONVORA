@@ -112,7 +112,7 @@ export function readS3ConfigFromEnv(): S3StorageConfig {
   const endpoint = process.env.S3_ENDPOINT?.trim();
   if (!bucket || !accessKeyId || !secretAccessKey) {
     throw new ConfigurationError(
-      "S3 media storage is not configured. Set S3_BUCKET, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY.",
+      "Photo storage is not configured. Please contact your administrator.",
     );
   }
   return {

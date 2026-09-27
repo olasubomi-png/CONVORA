@@ -17,7 +17,7 @@ import {
 } from "@/lib/posts/visibility";
 
 type CreatePostInput = {
-  body: string;
+  body?: string;
   type?: "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT" | "LINK";
   mediaUrl?: string | null;
   visibility?: AgentPostVisibility;
@@ -141,7 +141,7 @@ export async function createAgentPost(
     .insert(agentPosts)
     .values({
       agentProfileId,
-      body: input.body,
+      body: input.body?.trim() || (input.mediaUrl ? "[image]" : ""),
       type: input.type ?? "TEXT",
       mediaUrl: input.mediaUrl || null,
       visibility,

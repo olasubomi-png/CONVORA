@@ -121,3 +121,25 @@ export async function publishPostAction(
     };
   }
 }
+
+export async function archivePostAction(
+  formData: FormData,
+): Promise<ProfileActionResult> {
+  try {
+    const auth = await requireAuthenticatedUser();
+    const postId = formData.get("postId");
+    if (typeof postId !== "string" || !postId) {
+      return { ok: false, error: "Post is required.", code: "VALIDATION_ERROR" };
+    }
+    await setAgentPostVisibility(auth.user.id, postId, "ARCHIVED");
+    revalidatePath("/app/profile");
+    return { ok: true };
+  } catch (error) {
+    const publicError = toPublicError(error);
+    return {
+      ok: false,
+      error: publicError.payload.error.message,
+      code: publicError.payload.error.code,
+    };
+  }
+}
