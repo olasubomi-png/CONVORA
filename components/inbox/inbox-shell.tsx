@@ -23,6 +23,7 @@ type MessageRow = {
   body: string;
   senderType: string;
   createdAt: string;
+  attachments?: Array<{ mediaUrl: string; mimeType?: string }>;
 };
 
 type NoteRow = {
@@ -94,6 +95,8 @@ export function InboxShell({
     customerName: string;
   } | null>(null);
   const [composer, setComposer] = useState("");
+  const [pendingImage, setPendingImage] = useState<File | null>(null);
+  const [pendingPreview, setPendingPreview] = useState<string | null>(null);
   const [noteBody, setNoteBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -120,11 +123,13 @@ export function InboxShell({
           body: string;
           senderType: string;
           createdAt: string;
+          attachments?: Array<{ mediaUrl: string; mimeType?: string }>;
         }) => ({
           id: m.id,
           body: m.body,
           senderType: m.senderType,
           createdAt: m.createdAt,
+          attachments: m.attachments ?? [],
         }),
       ),
     );
@@ -152,13 +157,28 @@ export function InboxShell({
   }, [selected, loadThread]);
 
   async function sendMessage() {
-    if (!selected || !composer.trim()) return;
+    if (!selected || (!composer.trim() && !pendingImage)) return;
     setPending(true);
     try {
+      let mediaId: string | undefined;
+      if (pendingImage) {
+        const fd = new FormData();
+        fd.set("image", pendingImage);
+        const up = await fetch(`/api/conversations/${selected}/attachments`, {
+          method: "POST",
+          body: fd,
+        });
+        const upData = await up.json();
+        if (!up.ok) {
+          setError(upData.error?.message ?? "Image upload failed");
+          return;
+        }
+        mediaId = upData.mediaId as string;
+      }
       const res = await fetch(`/api/conversations/${selected}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: composer }),
+        body: JSON.stringify({ body: composer, mediaId }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -166,6 +186,9 @@ export function InboxShell({
         return;
       }
       setComposer("");
+      if (pendingPreview) URL.revokeObjectURL(pendingPreview);
+      setPendingImage(null);
+      setPendingPreview(null);
       await loadThread(selected);
     } finally {
       setPending(false);
@@ -461,7 +484,25 @@ export function InboxShell({
                 </button>
               </div>
               {tab === "reply" ? (
-                <div className="flex gap-2">
+                <>
+                  {pendingPreview ? (
+                    <div className="mb-2 flex items-center gap-2 px-1">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={pendingPreview} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                      <button
+                        type="button"
+                        className="text-xs underline"
+                        onClick={() => {
+                          if (pendingPreview) URL.revokeObjectURL(pendingPreview);
+                          setPendingImage(null);
+                          setPendingPreview(null);
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : null}
+                  <div className="flex gap-2">
                   <textarea
                     value={composer}
                     onChange={(e) => setComposer(e.target.value)}
@@ -470,6 +511,20 @@ export function InboxShell({
                     className="flex-1 resize-none rounded-xl border border-[var(--cv-border)] px-3 py-2 text-sm outline-none focus:border-[var(--cv-accent)] focus:ring-2 focus:ring-[var(--cv-accent-ring)]"
                     disabled={pending}
                   />
+                  <label className="self-end cursor-pointer rounded-xl border border-[var(--cv-border)] px-3 py-2 text-sm">
+                    📷
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] ?? null;
+                        if (pendingPreview) URL.revokeObjectURL(pendingPreview);
+                        setPendingImage(f);
+                        setPendingPreview(f ? URL.createObjectURL(f) : null);
+                      }}
+                    />
+                  </label>
                   <button
                     type="button"
                     onClick={() => void sendMessage()}
@@ -478,7 +533,8 @@ export function InboxShell({
                   >
                     Send
                   </button>
-                </div>
+                  </div>
+                </>
               ) : (
                 <div className="flex gap-2">
                   <input

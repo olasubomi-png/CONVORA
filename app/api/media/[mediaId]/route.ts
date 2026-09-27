@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { authorizeMediaRead } from "@/lib/media/access";
 import { jsonError } from "@/lib/api/response";
 
 type Params = { params: Promise<{ mediaId: string }> };
 
-export async function GET(_request: Request, { params }: Params) {
+export async function GET(request: Request, { params }: Params) {
   try {
     const { mediaId } = await params;
-    const asset = await authorizeMediaRead(mediaId);
+    const headerToken = request.headers.get("x-convora-visitor-token");
+    const cookieStore = await cookies();
+    const cookieToken = cookieStore.get("convora_wc_token")?.value ?? null;
+    const visitorToken = headerToken || cookieToken;
+    const asset = await authorizeMediaRead(mediaId, { visitorToken });
 
     return new NextResponse(new Uint8Array(asset.bytes), {
       status: 200,

@@ -45,6 +45,7 @@ export async function storeImageAsset(input: {
   maxBytes: number;
   visibility: MediaVisibility;
   createdByUserId?: string | null;
+  createdByVisitorId?: string | null;
   originalFilename?: string | null;
   claimedMime?: string | null;
 }): Promise<{
@@ -90,6 +91,7 @@ export async function storeImageAsset(input: {
         visibility: input.visibility,
         originalFilename: input.originalFilename?.slice(0, 200) ?? null,
         createdByUserId: input.createdByUserId ?? null,
+        createdByVisitorId: input.createdByVisitorId ?? null,
       })
       .returning();
 
@@ -157,12 +159,12 @@ export async function deleteMediaAsset(mediaId: string): Promise<void> {
 }
 
 /**
- * Assert media belongs to organization (for attachment).
+ * Assert media belongs to organization (generic org check).
  */
 export async function requireMediaInOrganization(
   mediaId: string,
   organizationId: string,
-): Promise<{ id: string; mimeType: string; byteSize: number }> {
+): Promise<{ id: string; mimeType: string; byteSize: number; consumedByMessageId: string | null }> {
   const db = getDatabase();
   const [row] = await db
     .select()
@@ -176,5 +178,86 @@ export async function requireMediaInOrganization(
     id: row.id,
     mimeType: row.mimeType,
     byteSize: row.byteSize,
+    consumedByMessageId: row.consumedByMessageId,
   };
 }
+
+/**
+ * Visitor may only attach unconsumed chat media they uploaded in this org.
+ */
+export async function requireVisitorMediaAttach(
+  mediaId: string,
+  organizationId: string,
+  visitorId: string,
+): Promise<{ id: string; mimeType: string; byteSize: number }> {
+  const db = getDatabase();
+  const [row] = await db
+    .select()
+    .from(mediaAssets)
+    .where(eq(mediaAssets.id, mediaId))
+    .limit(1);
+  if (
+    !row ||
+    row.organizationId !== organizationId ||
+    row.kind !== "chat" ||
+    row.createdByVisitorId !== visitorId ||
+    row.visibility !== "private"
+  ) {
+    throw new NotFoundError("Media not found.");
+  }
+  if (row.consumedByMessageId) {
+    throw new ValidationError("This image was already used in another message.");
+  }
+  return {
+    id: row.id,
+    mimeType: row.mimeType,
+    byteSize: row.byteSize,
+  };
+}
+
+/**
+ * Agent may only attach unconsumed chat media they uploaded in this org.
+ */
+export async function requireAgentMediaAttach(
+  mediaId: string,
+  organizationId: string,
+  userId: string,
+): Promise<{ id: string; mimeType: string; byteSize: number }> {
+  const db = getDatabase();
+  const [row] = await db
+    .select()
+    .from(mediaAssets)
+    .where(eq(mediaAssets.id, mediaId))
+    .limit(1);
+  if (
+    !row ||
+    row.organizationId !== organizationId ||
+    row.kind !== "chat" ||
+    row.createdByUserId !== userId ||
+    row.visibility !== "private"
+  ) {
+    throw new NotFoundError("Media not found.");
+  }
+  if (row.consumedByMessageId) {
+    throw new ValidationError("This image was already used in another message.");
+  }
+  return {
+    id: row.id,
+    mimeType: row.mimeType,
+    byteSize: row.byteSize,
+  };
+}
+
+/** Mark media as consumed by a message (same transaction). */
+export async function markMediaConsumed(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any,
+  mediaId: string,
+  messageId: string,
+): Promise<void> {
+  await tx
+    .update(mediaAssets)
+    .set({ consumedByMessageId: messageId })
+    .where(eq(mediaAssets.id, mediaId));
+}
+

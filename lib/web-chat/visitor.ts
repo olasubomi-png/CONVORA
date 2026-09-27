@@ -297,11 +297,15 @@ export async function sendVisitorMessage(
       if (!message) throw new Error("Failed to create message");
 
       if (mediaId) {
-        const { requireMediaInOrganization } = await import("@/lib/storage");
+        const {
+          requireVisitorMediaAttach,
+          markMediaConsumed,
+        } = await import("@/lib/storage");
         const { messageAttachments } = await import("@/db/schema");
-        const media = await requireMediaInOrganization(
+        const media = await requireVisitorMediaAttach(
           mediaId,
           visitor.organizationId,
+          visitor.id,
         );
         await tx.insert(messageAttachments).values({
           messageId: message.id,
@@ -310,6 +314,7 @@ export async function sendVisitorMessage(
           mimeType: media.mimeType,
           byteSize: media.byteSize,
         });
+        await markMediaConsumed(tx, media.id, message.id);
       }
 
       await enqueueAutomationEvent(

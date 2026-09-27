@@ -69,6 +69,7 @@ export async function POST(request: Request) {
       bytes: buf,
       maxBytes: MAX_CHAT_IMAGE_BYTES,
       visibility: "private",
+      createdByVisitorId: visitor.id,
       originalFilename: file.name,
       claimedMime: file.type,
     });

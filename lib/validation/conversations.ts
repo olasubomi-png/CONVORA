@@ -17,9 +17,14 @@ export const createConversationSchema = z.object({
   initialMessage: z.string().trim().max(10000).optional().nullable(),
 });
 
-export const sendMessageSchema = z.object({
-  body: z.string().trim().min(1).max(10000),
-});
+export const sendMessageSchema = z
+  .object({
+    body: z.string().trim().max(10000).optional().default(""),
+    mediaId: z.string().uuid().optional(),
+  })
+  .refine((v) => Boolean(v.body?.trim()) || Boolean(v.mediaId), {
+    message: "Message must include text and/or an image.",
+  });
 
 export const noteSchema = z.object({
   body: z.string().trim().min(1).max(10000),

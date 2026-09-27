@@ -19,11 +19,16 @@ export async function sendAgentMessage(
   actorUserId: string,
   conversationId: string,
   body: string,
+  mediaId?: string,
 ) {
   const trimmed = body.trim();
-  if (!trimmed) {
-    throw new ValidationError("Message body is required.");
+  if (!trimmed && !mediaId) {
+    throw new ValidationError("Message must include text and/or an image.");
   }
+  if (trimmed.length > 4000) {
+    throw new ValidationError("Message body is too long.");
+  }
+  const messageBody = trimmed || (mediaId ? "[image]" : "");
 
   const { conversation, membership } = await requireOrgConversation(
     actorUserId,
@@ -43,11 +48,32 @@ export async function sendAgentMessage(
         conversationId,
         senderType: "MEMBERSHIP",
         senderMembershipId: membership.id,
-        body: trimmed,
-        messageType: "TEXT",
+        body: messageBody,
+        messageType: mediaId ? "IMAGE" : "TEXT",
       })
       .returning();
     if (!row) throw new Error("Failed to create message");
+
+    if (mediaId) {
+      const {
+        requireAgentMediaAttach,
+        markMediaConsumed,
+      } = await import("@/lib/storage");
+      const { messageAttachments } = await import("@/db/schema");
+      const media = await requireAgentMediaAttach(
+        mediaId,
+        conversation.organizationId,
+        actorUserId,
+      );
+      await tx.insert(messageAttachments).values({
+        messageId: row.id,
+        organizationId: conversation.organizationId,
+        mediaAssetId: media.id,
+        mimeType: media.mimeType,
+        byteSize: media.byteSize,
+      });
+      await markMediaConsumed(tx, media.id, row.id);
+    }
 
     await tx
       .update(conversations)
@@ -61,7 +87,7 @@ export async function sendAgentMessage(
         eventKey: `message:${row.id}:sent`,
         payload: {
           conversationId,
-          message: { direction: "outbound", body: trimmed.slice(0, 200) },
+          message: { direction: "outbound", body: messageBody.slice(0, 200) },
         },
       },
       tx,
@@ -81,6 +107,45 @@ export async function sendAgentMessage(
  * before: older messages
  * after: newer messages
  */
+
+async function enrichMessagesWithAttachments<T extends { id: string }>(
+  rows: T[],
+): Promise<Array<T & { attachments: Array<{ id: string; mediaUrl: string; mimeType: string }> }>> {
+  if (rows.length === 0) {
+    return rows.map((r) => ({ ...r, attachments: [] }));
+  }
+  const { messageAttachments } = await import("@/db/schema");
+  const { inArray } = await import("drizzle-orm");
+  const db = getDatabase();
+  const atts = await db
+    .select({
+      id: messageAttachments.id,
+      messageId: messageAttachments.messageId,
+      mediaAssetId: messageAttachments.mediaAssetId,
+      mimeType: messageAttachments.mimeType,
+    })
+    .from(messageAttachments)
+    .where(
+      inArray(
+        messageAttachments.messageId,
+        rows.map((r) => r.id),
+      ),
+    );
+  const map: Record<
+    string,
+    Array<{ id: string; mediaUrl: string; mimeType: string }>
+  > = {};
+  for (const a of atts) {
+    if (!map[a.messageId]) map[a.messageId] = [];
+    map[a.messageId]!.push({
+      id: a.id,
+      mediaUrl: `/api/media/${a.mediaAssetId}`,
+      mimeType: a.mimeType,
+    });
+  }
+  return rows.map((r) => ({ ...r, attachments: map[r.id] ?? [] }));
+}
+
 export async function listMessages(
   actorUserId: string,
   conversationId: string,
@@ -126,7 +191,7 @@ export async function listMessages(
 
     const ordered = rows.reverse();
     return {
-      messages: ordered,
+      messages: await enrichMessagesWithAttachments(ordered),
       nextCursor:
         ordered.length === limit && ordered[0]
           ? encodeTimeIdCursor(ordered[0].createdAt, ordered[0].id)
@@ -163,7 +228,7 @@ export async function listMessages(
       .limit(limit);
 
     return {
-      messages: rows,
+      messages: await enrichMessagesWithAttachments(rows),
       nextCursor:
         rows.length === limit && rows[rows.length - 1]
           ? encodeTimeIdCursor(
@@ -187,7 +252,7 @@ export async function listMessages(
     .limit(limit);
   const ordered = rows.reverse();
   return {
-    messages: ordered,
+    messages: await enrichMessagesWithAttachments(ordered),
     nextCursor:
       ordered.length === limit && ordered[0]
         ? encodeTimeIdCursor(ordered[0].createdAt, ordered[0].id)

@@ -417,3 +417,11 @@ Optional env: `MEDIA_STORAGE_PATH`.
 | `S3_FORCE_PATH_STYLE` | `true` for path-style endpoints. |
 
 Vercel production must use S3/R2 (or set backend explicitly). Local filesystem is ephemeral on serverless.
+
+## Media ownership (migration 0025)
+
+Adds `media_assets.created_by_visitor_id` and `media_assets.consumed_by_message_id`.
+
+- Chat media is private and bound to the uploading visitor or agent user.
+- Media can be attached to at most one message (single-use).
+- Apply `db/migrations/0025_media_ownership.sql` on production Neon after 0024.

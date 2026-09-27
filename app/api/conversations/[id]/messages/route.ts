@@ -25,7 +25,12 @@ export async function POST(request: Request, { params }: Params) {
     const { id } = await params;
     const body = await request.json();
     const input = parseInput(sendMessageSchema, body);
-    const message = await sendAgentMessage(auth.user.id, id, input.body);
+    const message = await sendAgentMessage(
+      auth.user.id,
+      id,
+      input.body ?? "",
+      input.mediaId,
+    );
     return jsonOk({ message }, 201);
   } catch (error) {
     return jsonError(error);

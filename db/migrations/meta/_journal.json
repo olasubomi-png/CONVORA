@@ -127,6 +127,13 @@
       "when": 1728000000000,
       "tag": "0024_profiles_posts_media",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1728100000000,
+      "tag": "0025_media_ownership",
+      "breakpoints": true
     }
   ]
 }
