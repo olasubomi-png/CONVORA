@@ -1,29 +1,42 @@
-import { createHash, randomUUID } from "node:crypto";
-import { mkdir, writeFile, readFile, unlink } from "node:fs/promises";
-import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { getDatabase } from "@/db";
 import { mediaAssets } from "@/db/schema";
-import { eq } from "drizzle-orm";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import {
   assertValidImageUpload,
   extensionForMime,
   type AllowedImageMime,
 } from "@/lib/storage/image";
+import { resolveObjectStorage } from "@/lib/storage/resolve";
 
 export type MediaKind = "avatar" | "post" | "chat";
 export type MediaVisibility = "public" | "private";
 
-function storageRoot(): string {
-  return (
-    process.env.MEDIA_STORAGE_PATH?.trim() ||
-    path.join(process.cwd(), ".data", "media")
-  );
+export {
+  MAX_AVATAR_BYTES,
+  MAX_POST_IMAGE_BYTES,
+  MAX_CHAT_IMAGE_BYTES,
+  detectImageMime,
+  assertValidImageUpload,
+} from "@/lib/storage/image";
+
+export { resolveObjectStorage, resolveStorageBackendName, resetObjectStorageCache } from "@/lib/storage/resolve";
+
+function buildStorageKey(input: {
+  organizationId: string | null;
+  kind: MediaKind;
+  mediaId: string;
+  ext: string;
+}): string {
+  const org = input.organizationId ?? "shared";
+  // Server-generated only — never user-controlled path segments beyond UUID
+  return `org/${org}/${input.kind}/${input.mediaId}.${input.ext}`;
 }
 
 /**
- * Persist an image to local storage and record metadata.
- * Provider-agnostic: local filesystem today; storage_key can map to blob later.
+ * Validate, store, and record a media asset.
+ * On DB failure after object write, attempts orphan cleanup.
  */
 export async function storeImageAsset(input: {
   organizationId: string | null;
@@ -49,39 +62,56 @@ export async function storeImageAsset(input: {
 
   const id = randomUUID();
   const ext = extensionForMime(mime);
-  const orgPart = input.organizationId ?? "public";
-  const storageKey = `${input.kind}/${orgPart}/${id}.${ext}`;
-  const abs = path.join(storageRoot(), storageKey);
-  await mkdir(path.dirname(abs), { recursive: true });
-  await writeFile(abs, input.bytes);
+  const storageKey = buildStorageKey({
+    organizationId: input.organizationId,
+    kind: input.kind,
+    mediaId: id,
+    ext,
+  });
 
-  const db = getDatabase();
-  const [row] = await db
-    .insert(mediaAssets)
-    .values({
-      id,
-      organizationId: input.organizationId,
-      kind: input.kind,
+  const storage = resolveObjectStorage();
+  await storage.put({
+    storageKey,
+    bytes: input.bytes,
+    contentType: mime,
+  });
+
+  try {
+    const db = getDatabase();
+    const [row] = await db
+      .insert(mediaAssets)
+      .values({
+        id,
+        organizationId: input.organizationId,
+        kind: input.kind,
+        mimeType: mime,
+        byteSize: input.bytes.length,
+        storageKey,
+        visibility: input.visibility,
+        originalFilename: input.originalFilename?.slice(0, 200) ?? null,
+        createdByUserId: input.createdByUserId ?? null,
+      })
+      .returning();
+
+    if (!row) {
+      throw new ValidationError("Failed to store media metadata.");
+    }
+
+    return {
+      id: row.id,
+      storageKey: row.storageKey,
       mimeType: mime,
-      byteSize: input.bytes.length,
-      storageKey,
-      visibility: input.visibility,
-      originalFilename: input.originalFilename?.slice(0, 200) ?? null,
-      createdByUserId: input.createdByUserId ?? null,
-    })
-    .returning();
-
-  if (!row) {
-    throw new ValidationError("Failed to store media metadata.");
+      byteSize: row.byteSize,
+      publicPath: `/api/media/${row.id}`,
+    };
+  } catch (error) {
+    try {
+      await storage.delete(storageKey);
+    } catch {
+      // orphan cleanup best-effort
+    }
+    throw error;
   }
-
-  return {
-    id: row.id,
-    storageKey: row.storageKey,
-    mimeType: mime,
-    byteSize: row.byteSize,
-    publicPath: `/api/media/${row.id}`,
-  };
 }
 
 export async function readMediaAssetBytes(mediaId: string): Promise<{
@@ -90,6 +120,7 @@ export async function readMediaAssetBytes(mediaId: string): Promise<{
   visibility: string;
   organizationId: string | null;
   kind: string;
+  createdByUserId: string | null;
 }> {
   const db = getDatabase();
   const [row] = await db
@@ -100,14 +131,15 @@ export async function readMediaAssetBytes(mediaId: string): Promise<{
   if (!row) {
     throw new NotFoundError("Media not found.");
   }
-  const abs = path.join(storageRoot(), row.storageKey);
-  const bytes = await readFile(abs);
+  const storage = resolveObjectStorage();
+  const bytes = await storage.get(row.storageKey);
   return {
     bytes,
     mimeType: row.mimeType,
     visibility: row.visibility,
     organizationId: row.organizationId,
     kind: row.kind,
+    createdByUserId: row.createdByUserId,
   };
 }
 
@@ -119,23 +151,30 @@ export async function deleteMediaAsset(mediaId: string): Promise<void> {
     .where(eq(mediaAssets.id, mediaId))
     .limit(1);
   if (!row) return;
-  try {
-    await unlink(path.join(storageRoot(), row.storageKey));
-  } catch {
-    // ignore missing file
-  }
+  const storage = resolveObjectStorage();
+  await storage.delete(row.storageKey);
   await db.delete(mediaAssets).where(eq(mediaAssets.id, mediaId));
 }
 
-/** Content hash helper for idempotent tests */
-export function hashBytes(bytes: Buffer): string {
-  return createHash("sha256").update(bytes).digest("hex");
+/**
+ * Assert media belongs to organization (for attachment).
+ */
+export async function requireMediaInOrganization(
+  mediaId: string,
+  organizationId: string,
+): Promise<{ id: string; mimeType: string; byteSize: number }> {
+  const db = getDatabase();
+  const [row] = await db
+    .select()
+    .from(mediaAssets)
+    .where(eq(mediaAssets.id, mediaId))
+    .limit(1);
+  if (!row || row.organizationId !== organizationId) {
+    throw new NotFoundError("Media not found.");
+  }
+  return {
+    id: row.id,
+    mimeType: row.mimeType,
+    byteSize: row.byteSize,
+  };
 }
-
-export {
-  MAX_AVATAR_BYTES,
-  MAX_POST_IMAGE_BYTES,
-  MAX_CHAT_IMAGE_BYTES,
-  detectImageMime,
-  assertValidImageUpload,
-} from "@/lib/storage/image";

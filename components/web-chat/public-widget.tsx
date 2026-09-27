@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
+type Attachment = { id?: string; mediaUrl: string; mimeType?: string };
+
 type Msg = {
   id: string;
   body: string;
   senderType: string;
   createdAt: string;
+  attachments?: Attachment[];
 };
 
 const TOKEN_KEY = "cv_wc_session";
@@ -25,10 +28,13 @@ export function PublicWebChatWidget({
   const [token, setToken] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [composer, setComposer] = useState("");
+  const [pendingImage, setPendingImage] = useState<File | null>(null);
+  const [pendingPreview, setPendingPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [booting, setBooting] = useState(false);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const scrollBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -82,13 +88,18 @@ export function PublicWebChatWidget({
           (m: {
             id: string;
             body: string;
-            senderType: string;
+            role?: string;
+            senderType?: string;
             createdAt: string;
+            attachments?: Attachment[];
           }) => ({
             id: m.id,
             body: m.body,
-            senderType: m.senderType,
+            senderType:
+              m.senderType ??
+              (m.role === "visitor" ? "CUSTOMER" : "MEMBERSHIP"),
             createdAt: m.createdAt,
+            attachments: m.attachments ?? [],
           }),
         ),
       );
@@ -99,46 +110,9 @@ export function PublicWebChatWidget({
 
   async function openChat() {
     setOpen(true);
-    const t = token ?? (await startSession());
-    if (t) await loadMessages(t);
-  }
-
-  async function send() {
-    if (!composer.trim()) return;
-    let sessionToken = token;
-    if (!sessionToken) {
-      sessionToken = await startSession();
-      if (!sessionToken) return;
-    }
-    setSending(true);
-    setError(null);
-    const body = composer.trim();
-    setComposer("");
-    try {
-      const res = await fetch("/api/web-chat/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-convora-visitor-token": sessionToken,
-        },
-        body: JSON.stringify({ body }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setComposer(body);
-        setError(
-          data.error?.message ??
-            "We couldn't send your message. Please try again.",
-        );
-        return;
-      }
+    const sessionToken = token ?? (await startSession());
+    if (sessionToken) {
       await loadMessages(sessionToken);
-      scrollBottom();
-    } catch {
-      setComposer(body);
-      setError("You're offline. Check your connection and try again.");
-    } finally {
-      setSending(false);
     }
   }
 
@@ -155,9 +129,76 @@ export function PublicWebChatWidget({
     scrollBottom();
   }, [messages]);
 
+  function clearPendingImage() {
+    if (pendingPreview) URL.revokeObjectURL(pendingPreview);
+    setPendingImage(null);
+    setPendingPreview(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function onPickImage(file: File | null) {
+    if (!file) return;
+    if (pendingPreview) URL.revokeObjectURL(pendingPreview);
+    setPendingImage(file);
+    setPendingPreview(URL.createObjectURL(file));
+  }
+
+  async function send() {
+    if ((!composer.trim() && !pendingImage) || sending) return;
+    let sessionToken = token;
+    if (!sessionToken) {
+      sessionToken = await startSession();
+      if (!sessionToken) return;
+    }
+    setSending(true);
+    setError(null);
+    try {
+      let mediaId: string | undefined;
+      if (pendingImage) {
+        const fd = new FormData();
+        fd.set("publicKey", publicKey);
+        fd.set("sessionToken", sessionToken);
+        fd.set("image", pendingImage);
+        const up = await fetch("/api/web-chat/attachments", {
+          method: "POST",
+          body: fd,
+        });
+        const upData = await up.json();
+        if (!up.ok) {
+          setError(upData.error?.message ?? "Image upload failed.");
+          return;
+        }
+        mediaId = upData.mediaId as string;
+      }
+
+      const res = await fetch("/api/web-chat/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-convora-visitor-token": sessionToken,
+        },
+        body: JSON.stringify({
+          body: composer.trim() || (mediaId ? " " : ""),
+          mediaId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error?.message ?? "Could not send message.");
+        return;
+      }
+      setComposer("");
+      clearPendingImage();
+      await loadMessages(sessionToken);
+    } catch {
+      setError("You're offline. Check your connection and try again.");
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
     <>
-      {/* Sticky CTA on mobile */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--cv-border)] bg-white p-3 shadow-[0_-4px_20px_rgba(15,23,42,0.06)] sm:hidden">
         <button
           type="button"
@@ -210,14 +251,9 @@ export function PublicWebChatWidget({
                 </p>
               ) : null}
               {welcomeMessage && messages.length === 0 && !booting ? (
-                <div className="max-w-[85%] rounded-2xl rounded-bl-md border border-[var(--cv-border)] bg-white px-3.5 py-2.5 text-sm text-[var(--cv-fg)] shadow-sm">
+                <p className="text-center text-sm text-[var(--cv-fg-muted)]">
                   {welcomeMessage}
-                </div>
-              ) : null}
-              {!welcomeMessage && messages.length === 0 && !booting ? (
-                <div className="max-w-[85%] rounded-2xl rounded-bl-md border border-[var(--cv-border)] bg-white px-3.5 py-2.5 text-sm text-[var(--cv-fg)] shadow-sm">
-                  Hi! How can we help?
-                </div>
+                </p>
               ) : null}
               {messages.map((m) => {
                 const outbound =
@@ -238,7 +274,18 @@ export function PublicWebChatWidget({
                           : "rounded-bl-md border border-[var(--cv-border)] bg-white text-[var(--cv-fg)]",
                       )}
                     >
-                      <p className="whitespace-pre-wrap">{m.body}</p>
+                      {m.attachments?.map((a) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={a.mediaUrl}
+                          src={a.mediaUrl}
+                          alt=""
+                          className="mb-2 max-h-48 w-full rounded-lg object-cover"
+                        />
+                      ))}
+                      {m.body.trim() ? (
+                        <p className="whitespace-pre-wrap">{m.body}</p>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -260,7 +307,43 @@ export function PublicWebChatWidget({
             ) : null}
 
             <footer className="border-t border-[var(--cv-border)] bg-white p-3">
+              {pendingPreview ? (
+                <div className="mb-2 flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={pendingPreview}
+                    alt="Selected"
+                    className="h-14 w-14 rounded-lg object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={clearPendingImage}
+                    className="text-xs text-[var(--cv-fg-muted)] underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : null}
               <div className="flex gap-2">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) =>
+                    onPickImage(e.target.files?.[0] ?? null)
+                  }
+                />
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={sending || booting}
+                  className="rounded-xl border border-[var(--cv-border)] px-3 py-2.5 text-sm"
+                  aria-label="Attach image"
+                >
+                  📷
+                </button>
                 <label htmlFor="wc-composer" className="sr-only">
                   Write a message
                 </label>
@@ -281,7 +364,11 @@ export function PublicWebChatWidget({
                 <button
                   type="button"
                   onClick={() => void send()}
-                  disabled={sending || booting || !composer.trim()}
+                  disabled={
+                    sending ||
+                    booting ||
+                    (!composer.trim() && !pendingImage)
+                  }
                   className="rounded-xl bg-[var(--cv-accent)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--cv-accent-hover)] disabled:opacity-50"
                   aria-label="Send message"
                 >

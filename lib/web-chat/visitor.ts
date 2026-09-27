@@ -233,11 +233,14 @@ export async function sendVisitorMessage(
   sessionToken: string,
   body: string,
   clientMessageId?: string,
+  mediaId?: string,
 ) {
   const trimmed = body.trim();
-  if (!trimmed || trimmed.length > 4000) {
-    throw new ValidationError("Message must be 1–4000 characters.");
+  if ((!trimmed && !mediaId) || trimmed.length > 4000) {
+    throw new ValidationError("Message must include text and/or an image.");
   }
+  const messageBody = trimmed || (mediaId ? "[image]" : "");
+
 
   const { visitor } = await requireVisitorSession(sessionToken);
 
@@ -286,12 +289,28 @@ export async function sendVisitorMessage(
           conversationId,
           senderType: "CUSTOMER",
           senderCustomerId: customerId,
-          body: trimmed,
-          messageType: "TEXT",
+          body: messageBody,
+          messageType: mediaId ? "IMAGE" : "TEXT",
           metadata: clientMessageId ? { clientMessageId } : {},
         })
         .returning();
       if (!message) throw new Error("Failed to create message");
+
+      if (mediaId) {
+        const { requireMediaInOrganization } = await import("@/lib/storage");
+        const { messageAttachments } = await import("@/db/schema");
+        const media = await requireMediaInOrganization(
+          mediaId,
+          visitor.organizationId,
+        );
+        await tx.insert(messageAttachments).values({
+          messageId: message.id,
+          organizationId: visitor.organizationId,
+          mediaAssetId: media.id,
+          mimeType: media.mimeType,
+          byteSize: media.byteSize,
+        });
+      }
 
       await enqueueAutomationEvent(
         {
@@ -301,7 +320,7 @@ export async function sendVisitorMessage(
           payload: {
             conversationId,
             customerId,
-            message: { direction: "inbound", body: trimmed.slice(0, 200) },
+            message: { direction: "inbound", body: messageBody.slice(0, 200) },
           },
         },
         tx,
@@ -397,6 +416,33 @@ export async function listVisitorMessages(
     .orderBy(asc(messages.createdAt), asc(messages.id))
     .limit(limit);
 
+  const messageIds = rows.map((m) => m.id);
+  const attachmentMap: Record<
+    string,
+    Array<{ id: string; mediaUrl: string; mimeType: string }>
+  > = {};
+  if (messageIds.length > 0) {
+    const { messageAttachments } = await import("@/db/schema");
+    const { inArray } = await import("drizzle-orm");
+    const atts = await db
+      .select({
+        id: messageAttachments.id,
+        messageId: messageAttachments.messageId,
+        mediaAssetId: messageAttachments.mediaAssetId,
+        mimeType: messageAttachments.mimeType,
+      })
+      .from(messageAttachments)
+      .where(inArray(messageAttachments.messageId, messageIds));
+    for (const a of atts) {
+      if (!attachmentMap[a.messageId]) attachmentMap[a.messageId] = [];
+      attachmentMap[a.messageId]!.push({
+        id: a.id,
+        mediaUrl: `/api/media/${a.mediaAssetId}`,
+        mimeType: a.mimeType,
+      });
+    }
+  }
+
   return {
     conversationId: visitor.conversationId,
     messages: rows.map((m) => ({
@@ -404,6 +450,7 @@ export async function listVisitorMessages(
       body: m.body,
       role: m.senderType === "CUSTOMER" ? ("visitor" as const) : ("agent" as const),
       createdAt: m.createdAt,
+      attachments: attachmentMap[m.id] ?? [],
     })),
   };
 }

@@ -127,9 +127,11 @@ export function AgentProfileForm({ organizationId, action, defaults }: Props) {
 
 /** Client-side avatar upload using /api/profiles/avatar */
 export function AvatarUploadButton({
+  profileId,
   currentUrl,
   onUpdated,
 }: {
+  profileId: string;
   currentUrl?: string | null;
   onUpdated?: (url: string | null) => void;
 }) {
@@ -144,6 +146,7 @@ export function AvatarUploadButton({
     setError(null);
     try {
       const fd = new FormData();
+      fd.set("profileId", profileId);
       fd.set("avatar", file);
       const res = await fetch("/api/profiles/avatar", { method: "POST", body: fd });
       const data = (await res.json()) as { avatarUrl?: string; error?: { message?: string } };

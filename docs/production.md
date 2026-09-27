@@ -402,3 +402,18 @@ Upload limits:
 
 Production: apply SQL file `db/migrations/0024_profiles_posts_media.sql` on Neon (do not re-run historical migrations that already exist).
 Optional env: `MEDIA_STORAGE_PATH`.
+
+## Media storage
+
+| Variable | Notes |
+| --- | --- |
+| `MEDIA_STORAGE_BACKEND` | `local` or `s3`. Production defaults to `s3`. |
+| `MEDIA_STORAGE_PATH` | Local filesystem root (dev/VPS persistent disk only). |
+| `S3_BUCKET` | Required when backend is `s3`. |
+| `S3_ACCESS_KEY_ID` | Server-only. |
+| `S3_SECRET_ACCESS_KEY` | Server-only. Never expose to client. |
+| `S3_REGION` | Defaults to `auto`. |
+| `S3_ENDPOINT` | Optional (R2/MinIO). |
+| `S3_FORCE_PATH_STYLE` | `true` for path-style endpoints. |
+
+Vercel production must use S3/R2 (or set backend explicitly). Local filesystem is ephemeral on serverless.

@@ -25,13 +25,6 @@ export async function POST(request: Request) {
       throw new ValidationError("publicKey and sessionToken are required.");
     }
 
-    const rl = checkRateLimit({
-      key: `wc-upload:${publicKey.slice(0, 12)}`,
-      limit: 30,
-      windowMs: 60_000,
-    });
-    if (!rl.allowed) throw new RateLimitError();
-
     const db = getDatabase();
     const [installation] = await db
       .select()
@@ -61,6 +54,13 @@ export async function POST(request: Request) {
     if (!visitor || visitor.expiresAt < new Date()) {
       throw new ValidationError("Invalid or expired visitor session.");
     }
+
+    const rl = checkRateLimit({
+      key: `wc-upload:${visitor.organizationId}:${visitor.id}`,
+      limit: 30,
+      windowMs: 60_000,
+    });
+    if (!rl.allowed) throw new RateLimitError();
 
     const buf = Buffer.from(await file.arrayBuffer());
     const stored = await storeImageAsset({
