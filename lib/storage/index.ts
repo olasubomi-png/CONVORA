@@ -116,14 +116,23 @@ export async function storeImageAsset(input: {
   }
 }
 
-export async function readMediaAssetBytes(mediaId: string): Promise<{
-  bytes: Buffer;
+export type MediaAssetMetadata = {
+  id: string;
+  storageKey: string;
   mimeType: string;
   visibility: string;
   organizationId: string | null;
   kind: string;
   createdByUserId: string | null;
-}> {
+  createdByVisitorId: string | null;
+  consumedByMessageId: string | null;
+  byteSize: number;
+};
+
+/** DB-only metadata. Does not touch object storage. */
+export async function getMediaAssetMetadata(
+  mediaId: string,
+): Promise<MediaAssetMetadata> {
   const db = getDatabase();
   const [row] = await db
     .select()
@@ -133,15 +142,46 @@ export async function readMediaAssetBytes(mediaId: string): Promise<{
   if (!row) {
     throw new NotFoundError("Media not found.");
   }
-  const storage = resolveObjectStorage();
-  const bytes = await storage.get(row.storageKey);
   return {
-    bytes,
+    id: row.id,
+    storageKey: row.storageKey,
     mimeType: row.mimeType,
     visibility: row.visibility,
     organizationId: row.organizationId,
     kind: row.kind,
     createdByUserId: row.createdByUserId,
+    createdByVisitorId: row.createdByVisitorId,
+    consumedByMessageId: row.consumedByMessageId,
+    byteSize: row.byteSize,
+  };
+}
+
+/** Read object bytes by storage key after authorization has succeeded. */
+export async function readStorageObjectBytes(storageKey: string): Promise<Buffer> {
+  const storage = resolveObjectStorage();
+  return storage.get(storageKey);
+}
+
+/**
+ * Convenience: metadata + bytes. Prefer authorize-then-read for private media.
+ */
+export async function readMediaAssetBytes(mediaId: string): Promise<{
+  bytes: Buffer;
+  mimeType: string;
+  visibility: string;
+  organizationId: string | null;
+  kind: string;
+  createdByUserId: string | null;
+}> {
+  const meta = await getMediaAssetMetadata(mediaId);
+  const bytes = await readStorageObjectBytes(meta.storageKey);
+  return {
+    bytes,
+    mimeType: meta.mimeType,
+    visibility: meta.visibility,
+    organizationId: meta.organizationId,
+    kind: meta.kind,
+    createdByUserId: meta.createdByUserId,
   };
 }
 

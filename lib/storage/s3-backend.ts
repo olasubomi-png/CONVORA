@@ -5,7 +5,11 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import type { ObjectStorage } from "@/lib/storage/backend";
-import { ConfigurationError, NotFoundError } from "@/lib/errors";
+import {
+  ConfigurationError,
+  InternalError,
+  NotFoundError,
+} from "@/lib/errors";
 
 export type S3StorageConfig = {
   bucket: string;
@@ -15,6 +19,19 @@ export type S3StorageConfig = {
   endpoint?: string;
   forcePathStyle?: boolean;
 };
+
+function isS3NotFound(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as {
+    name?: string;
+    Code?: string;
+    $metadata?: { httpStatusCode?: number };
+  };
+  if (e.name === "NoSuchKey" || e.name === "NotFound") return true;
+  if (e.Code === "NoSuchKey" || e.Code === "NotFound") return true;
+  if (e.$metadata?.httpStatusCode === 404) return true;
+  return false;
+}
 
 export function createS3ObjectStorage(config: S3StorageConfig): ObjectStorage {
   const client = new S3Client({
@@ -34,15 +51,22 @@ export function createS3ObjectStorage(config: S3StorageConfig): ObjectStorage {
   return {
     name: "s3",
     async put(input) {
-      await client.send(
-        new PutObjectCommand({
-          Bucket: config.bucket,
-          Key: input.storageKey,
-          Body: input.bytes,
-          ContentType: input.contentType,
-        }),
-      );
-      return { storageKey: input.storageKey, byteSize: input.bytes.length };
+      try {
+        await client.send(
+          new PutObjectCommand({
+            Bucket: config.bucket,
+            Key: input.storageKey,
+            Body: input.bytes,
+            ContentType: input.contentType,
+          }),
+        );
+        return { storageKey: input.storageKey, byteSize: input.bytes.length };
+      } catch (error) {
+        if (error instanceof ConfigurationError) throw error;
+        throw new InternalError("Media storage write failed.", {
+          cause: error,
+        });
+      }
     },
     async get(storageKey) {
       try {
@@ -54,11 +78,15 @@ export function createS3ObjectStorage(config: S3StorageConfig): ObjectStorage {
         );
         const stream = res.Body;
         if (!stream) throw new NotFoundError("Object not found.");
-        const bytes = Buffer.from(await stream.transformToByteArray());
-        return bytes;
+        return Buffer.from(await stream.transformToByteArray());
       } catch (error) {
         if (error instanceof NotFoundError) throw error;
-        throw new NotFoundError("Object not found.");
+        if (isS3NotFound(error)) {
+          throw new NotFoundError("Object not found.");
+        }
+        throw new InternalError("Media storage read failed.", {
+          cause: error,
+        });
       }
     },
     async delete(storageKey) {
@@ -70,7 +98,7 @@ export function createS3ObjectStorage(config: S3StorageConfig): ObjectStorage {
           }),
         );
       } catch {
-        // ignore
+        // best-effort cleanup; do not surface provider details
       }
     },
   };
