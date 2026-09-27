@@ -233,3 +233,6 @@ export type {
   PaymentStatus,
 } from "./billing";
 export * from "./channel-oauth";
+export * from "./media";
+export * from "./agent-post-social";
+export * from "./message-attachments";

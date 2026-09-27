@@ -26,6 +26,8 @@ export type PublicAgentPost = {
   body: string;
   mediaUrl: string | null;
   publishedAt: string | null;
+  likeCount: number;
+  commentCount: number;
 };
 
 export type PublicOrganizationProfile = {

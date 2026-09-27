@@ -388,3 +388,17 @@ Personal Instagram accounts are not supported.
 ### WhatsApp
 
 CONNECTED only when a `phone_number_id` is discovered after authorization. Otherwise the UI shows **Needs action** (no fake active installation).
+
+## Profiles, posts, and media (migration 0024)
+
+New tables: `media_assets`, `agent_post_likes`, `agent_post_comments`, `message_attachments`.
+
+Storage: local filesystem under `MEDIA_STORAGE_PATH` or `.data/media` by default.
+Public media is served at `/api/media/{id}`. Private chat media requires org membership.
+
+Upload limits:
+- Avatar: 2 MiB (JPEG/PNG/WebP/GIF)
+- Post/chat images: 5 MiB
+
+Production: apply SQL file `db/migrations/0024_profiles_posts_media.sql` on Neon (do not re-run historical migrations that already exist).
+Optional env: `MEDIA_STORAGE_PATH`.

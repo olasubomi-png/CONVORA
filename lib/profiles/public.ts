@@ -13,6 +13,7 @@ import type {
   PublicAgentProfile,
   PublicOrganizationProfile,
 } from "@/lib/profiles/types";
+import { getEngagementForPosts } from "@/lib/posts/social";
 
 /**
  * Active public agent chain:
@@ -91,12 +92,15 @@ export async function getPublicAgentProfileByUsername(
     .orderBy(desc(agentPosts.publishedAt))
     .limit(20);
 
+  const engagement = await getEngagementForPosts(postRows.map((p) => p.id));
   const posts: PublicAgentPost[] = postRows.map((p) => ({
     id: p.id,
     type: p.type,
     body: p.body,
     mediaUrl: p.mediaUrl,
     publishedAt: p.publishedAt ? p.publishedAt.toISOString() : null,
+    likeCount: engagement[p.id]?.likeCount ?? 0,
+    commentCount: engagement[p.id]?.commentCount ?? 0,
   }));
 
   return {

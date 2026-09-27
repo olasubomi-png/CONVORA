@@ -124,3 +124,58 @@ export function AgentProfileForm({ organizationId, action, defaults }: Props) {
     </form>
   );
 }
+
+/** Client-side avatar upload using /api/profiles/avatar */
+export function AvatarUploadButton({
+  currentUrl,
+  onUpdated,
+}: {
+  currentUrl?: string | null;
+  onUpdated?: (url: string | null) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onFile(file: File | null) {
+    if (!file) return;
+    setPreview(URL.createObjectURL(file));
+    setBusy(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.set("avatar", file);
+      const res = await fetch("/api/profiles/avatar", { method: "POST", body: fd });
+      const data = (await res.json()) as { avatarUrl?: string; error?: { message?: string } };
+      if (!res.ok) {
+        setError(data.error?.message ?? "Upload failed");
+        return;
+      }
+      onUpdated?.(data.avatarUrl ?? null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {(preview || currentUrl) ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={preview || currentUrl || ""}
+          alt="Avatar preview"
+          className="h-20 w-20 rounded-2xl object-cover border border-[var(--cv-border)]"
+        />
+      ) : null}
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        capture="user"
+        disabled={busy}
+        onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
+        className="block text-sm"
+      />
+      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+    </div>
+  );
+}

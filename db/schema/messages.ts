@@ -19,7 +19,7 @@ export const messageSenderTypeEnum = pgEnum("message_sender_type", [
   "SYSTEM",
 ]);
 
-export const messageTypeEnum = pgEnum("message_type", ["TEXT", "SYSTEM"]);
+export const messageTypeEnum = pgEnum("message_type", ["TEXT", "SYSTEM", "IMAGE"]);
 
 export const messages = pgTable(
   "messages",
