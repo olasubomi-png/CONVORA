@@ -85,6 +85,7 @@ export async function listOrganizationConversations(
       createdAt: conversations.createdAt,
       customerId: customers.id,
       customerDisplayName: customers.displayName,
+      customerAvatarUrl: customers.avatarUrl,
       lastReadAt: conversationReadState.lastReadAt,
     })
     .from(conversations)
@@ -118,6 +119,7 @@ export async function listOrganizationConversations(
       customer: {
         id: r.customerId,
         displayName: r.customerDisplayName,
+        avatarUrl: r.customerAvatarUrl,
       },
       unread:
         r.lastMessageAt != null &&

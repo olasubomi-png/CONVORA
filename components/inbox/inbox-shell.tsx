@@ -14,7 +14,7 @@ type ConversationRow = {
   lastMessageAt: string | Date | null;
   assignedToMembershipId: string | null;
   createdAt: string | Date;
-  customer: { id: string; displayName: string };
+  customer: { id: string; displayName: string; avatarUrl?: string | null };
   unread: boolean;
 };
 
@@ -23,6 +23,8 @@ type MessageRow = {
   body: string;
   senderType: string;
   createdAt: string;
+  seenAt?: string | null;
+  deliveredAt?: string | null;
   attachments?: Array<{ mediaUrl: string; mimeType?: string }>;
 };
 
@@ -115,6 +117,11 @@ export function InboxShell({
       fetch(`/api/conversations/${id}/notes`),
       fetch(`/api/conversations/${id}`),
     ]);
+    void fetch(`/api/conversations/${id}/read`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }).catch(() => undefined);
     if (!msgRes.ok || !detRes.ok) {
       setError("Unable to load conversation.");
       return;
@@ -129,12 +136,16 @@ export function InboxShell({
           body: string;
           senderType: string;
           createdAt: string;
+          seenAt?: string | null;
+          deliveredAt?: string | null;
           attachments?: Array<{ mediaUrl: string; mimeType?: string }>;
         }) => ({
           id: m.id,
           body: m.body,
           senderType: m.senderType,
           createdAt: m.createdAt,
+          seenAt: m.seenAt ?? null,
+          deliveredAt: m.deliveredAt ?? null,
           attachments: m.attachments ?? [],
         }),
       ),
@@ -297,13 +308,18 @@ export function InboxShell({
                   <div className="flex gap-3">
                     <span
                       className={cn(
-                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                        "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-semibold",
                         selected === c.id
                           ? "bg-[var(--cv-accent)] text-white"
                           : "bg-slate-100 text-slate-600",
                       )}
                     >
-                      {initials(friendlyCustomerName(c.customer.displayName))}
+                      {c.customer.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={c.customer.avatarUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        initials(friendlyCustomerName(c.customer.displayName))
+                      )}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
@@ -412,7 +428,9 @@ export function InboxShell({
             <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 lg:px-6">
               {messages.map((m) => {
                 const outbound =
-                  m.senderType === "AGENT" || m.senderType === "SYSTEM";
+                  m.senderType === "AGENT" ||
+                  m.senderType === "MEMBERSHIP" ||
+                  m.senderType === "SYSTEM";
                 return (
                   <div
                     key={m.id}
@@ -436,7 +454,13 @@ export function InboxShell({
                           outbound ? "text-blue-100" : "text-[var(--cv-fg-subtle)]",
                         )}
                       >
-                        {formatTime(m.createdAt)}
+                        {outbound && m.senderType !== "SYSTEM"
+                          ? m.seenAt
+                            ? `Seen · ${formatTime(m.createdAt)}`
+                            : m.deliveredAt
+                              ? `Delivered · ${formatTime(m.createdAt)}`
+                              : formatTime(m.createdAt)
+                          : formatTime(m.createdAt)}
                       </p>
                     </div>
                   </div>

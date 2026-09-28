@@ -236,3 +236,14 @@ export * from "./channel-oauth";
 export * from "./media";
 export * from "./agent-post-social";
 export * from "./message-attachments";
+
+export {
+  agentNotifications,
+  notificationPreferences,
+  pushSubscriptions,
+} from "./notifications";
+export type {
+  AgentNotification,
+  NotificationPreference,
+  PushSubscription,
+} from "./notifications";

@@ -1,22 +1,27 @@
+import { NextResponse } from "next/server";
+import { jsonError } from "@/lib/api/response";
 import { requireAuthenticatedUser } from "@/lib/authz/context";
-import { markConversationRead } from "@/lib/conversations/read-state";
-import { jsonError, jsonOk } from "@/lib/api/response";
+import { markConversationSeenByAgent } from "@/lib/messaging/receipts";
+import { parseInput, z } from "@/lib/validation";
 
-type Params = { params: Promise<{ id: string }> };
+const bodySchema = z.object({
+  upToMessageId: z.string().uuid().optional().nullable(),
+});
 
-export async function POST(request: Request, { params }: Params) {
+type Ctx = { params: Promise<{ id: string }> };
+
+export async function POST(request: Request, ctx: Ctx) {
   try {
     const auth = await requireAuthenticatedUser();
-    const { id } = await params;
-    let messageId: string | undefined;
-    try {
-      const body = await request.json();
-      if (typeof body?.messageId === "string") messageId = body.messageId;
-    } catch {
-      /* empty body ok */
-    }
-    await markConversationRead(auth.user.id, id, messageId);
-    return jsonOk({ ok: true });
+    const { id: conversationId } = await ctx.params;
+    const body = await request.json().catch(() => ({}));
+    const input = parseInput(bodySchema, body);
+    const result = await markConversationSeenByAgent(
+      auth.user.id,
+      conversationId,
+      input.upToMessageId,
+    );
+    return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     return jsonError(error);
   }

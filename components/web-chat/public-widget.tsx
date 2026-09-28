@@ -12,6 +12,8 @@ type ChatMessage = {
   body: string;
   senderType: string;
   createdAt: string;
+  deliveredAt?: string | null;
+  seenAt?: string | null;
   attachments?: Attachment[];
   pending?: boolean;
 };
@@ -151,6 +153,8 @@ export function PublicWebChatWidget({
               m.senderType ??
               (m.role === "visitor" ? "CUSTOMER" : "MEMBERSHIP"),
             createdAt: m.createdAt,
+            deliveredAt: (m as { deliveredAt?: string }).deliveredAt ?? null,
+            seenAt: (m as { seenAt?: string }).seenAt ?? null,
             attachments: m.attachments ?? [],
           }),
         ),
@@ -182,9 +186,19 @@ export function PublicWebChatWidget({
   useEffect(() => {
     if (open && token && !needsIdentity) {
       void loadMessages(token);
-      const id = window.setInterval(() => {
+      const tick = () => {
         void loadMessages(token);
-      }, 4000);
+        void fetch("/api/web-chat/read", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-convora-visitor-token": token,
+          },
+          body: JSON.stringify({}),
+        }).catch(() => undefined);
+      };
+      const id = window.setInterval(tick, 4000);
+      tick();
       return () => window.clearInterval(id);
     }
   }, [open, token, needsIdentity, loadMessages]);
@@ -217,6 +231,21 @@ export function PublicWebChatWidget({
       }
       setVisitorName(data.identity?.displayName ?? nameInput.trim());
       setNeedsIdentity(false);
+      const avatarFile = (window as unknown as { __wcAvatar?: File | null }).__wcAvatar;
+      if (avatarFile) {
+        try {
+          const fd = new FormData();
+          fd.set("avatar", avatarFile);
+          await fetch("/api/web-chat/identity/avatar", {
+            method: "POST",
+            headers: { "x-convora-visitor-token": token },
+            body: fd,
+          });
+        } catch {
+          /* non-blocking */
+        }
+        (window as unknown as { __wcAvatar?: File | null }).__wcAvatar = null;
+      }
       await loadMessages(token);
     } catch {
       setError("You're offline. Check your connection and try again.");
@@ -422,6 +451,24 @@ export function PublicWebChatWidget({
                 </div>
                 <div>
                   <label
+                    htmlFor="wc-avatar"
+                    className="mb-1 block text-xs font-medium text-[var(--cv-fg)]"
+                  >
+                    Photo <span className="font-normal text-[var(--cv-fg-muted)]">(optional)</span>
+                  </label>
+                  <input
+                    id="wc-avatar"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="block w-full text-sm"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      (window as unknown as { __wcAvatar?: File | null }).__wcAvatar = f;
+                    }}
+                  />
+                </div>
+                <div>
+                  <label
                     htmlFor="wc-email"
                     className="mb-1 block text-xs font-medium text-[var(--cv-fg)]"
                   >
@@ -497,7 +544,15 @@ export function PublicWebChatWidget({
                         mine ? "text-white/70" : "text-[var(--cv-fg-muted)]",
                       )}
                     >
-                      {m.pending ? "Sending…" : formatTime(m.createdAt)}
+                      {m.pending
+                        ? "Sending…"
+                        : mine
+                          ? m.seenAt
+                            ? `Seen · ${formatTime(m.createdAt)}`
+                            : m.deliveredAt
+                              ? `Delivered · ${formatTime(m.createdAt)}`
+                              : formatTime(m.createdAt)
+                          : formatTime(m.createdAt)}
                     </p>
                   </div>
                 </div>

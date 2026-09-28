@@ -29,6 +29,7 @@ import {
   enqueueAutomationEvent,
   flushAutomationEvents,
 } from "@/lib/automation/dispatch";
+import { notifyAgentsOfCustomerMessage } from "@/lib/notifications/notify";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -348,6 +349,18 @@ export async function sendVisitorMessage(
       return message;
     });
     await flushAutomationEvents(visitor.organizationId);
+    try {
+      await notifyAgentsOfCustomerMessage({
+        organizationId: visitor.organizationId,
+        conversationId,
+        messageId: messageResult.id,
+        customerId,
+        channel: "WEB",
+        preview: messageBody,
+      });
+    } catch {
+      // Notification failures must not fail message delivery
+    }
     return messageResult;
   } catch (error) {
     if (clientMessageId && isUniqueViolation(error)) {
@@ -415,6 +428,8 @@ export async function listVisitorMessages(
       body: messages.body,
       senderType: messages.senderType,
       createdAt: messages.createdAt,
+      deliveredAt: messages.deliveredAt,
+      seenAt: messages.seenAt,
     })
     .from(messages)
     .where(and(...conditions))
@@ -455,6 +470,8 @@ export async function listVisitorMessages(
       body: m.body,
       role: m.senderType === "CUSTOMER" ? ("visitor" as const) : ("agent" as const),
       createdAt: m.createdAt,
+      deliveredAt: m.deliveredAt,
+      seenAt: m.seenAt,
       attachments: attachmentMap[m.id] ?? [],
     })),
   };
@@ -466,7 +483,11 @@ export async function listVisitorMessages(
  */
 export async function setVisitorIdentity(
   sessionToken: string,
-  input: { displayName: string; email?: string | null },
+  input: {
+    displayName: string;
+    email?: string | null;
+    avatarUrl?: string | null;
+  },
 ) {
   const name = input.displayName.trim().replace(/\s+/g, " ");
   if (name.length < 2) {
@@ -518,12 +539,16 @@ export async function setVisitorIdentity(
       const patch: {
         displayName: string;
         email?: string | null;
+        avatarUrl?: string | null;
         updatedAt: Date;
       } = {
         displayName: name,
         updatedAt: new Date(),
       };
       if (email) patch.email = email;
+      if (input.avatarUrl !== undefined) {
+        patch.avatarUrl = input.avatarUrl;
+      }
       try {
         await tx
           .update(customers)
@@ -581,6 +606,7 @@ export async function setVisitorIdentity(
               organizationId: locked.organizationId,
               displayName: name,
               email,
+              avatarUrl: input.avatarUrl ?? null,
             })
             .returning();
           if (!created) throw new Error("Failed to create customer");

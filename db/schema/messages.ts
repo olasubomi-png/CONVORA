@@ -40,12 +40,15 @@ export const messages = pgTable(
     messageType: messageTypeEnum("message_type").notNull().default("TEXT"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    seenAt: timestamp("seen_at", { withTimezone: true }),
     editedAt: timestamp("edited_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
     index("messages_conversation_id_idx").on(t.conversationId),
     index("messages_conversation_created_idx").on(t.conversationId, t.createdAt),
+    index("messages_conversation_seen_idx").on(t.conversationId, t.seenAt),
     check(
       "messages_sender_identity_check",
       sql`(
