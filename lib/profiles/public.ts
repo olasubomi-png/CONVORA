@@ -190,11 +190,17 @@ export async function getPublicOrganizationProfileBySlug(
 
   const agents = agentRows;
 
+  // Prefer organization logo; fall back to first public agent avatar when absent.
+  const resolvedLogoUrl =
+    org.logoUrl ??
+    agents.find((a) => Boolean(a.avatarUrl))?.avatarUrl ??
+    null;
+
   return {
     slug: org.slug,
     displayName: org.displayName ?? org.name,
     description: org.description,
-    logoUrl: org.logoUrl,
+    logoUrl: resolvedLogoUrl,
     bannerUrl: org.bannerUrl,
     websiteUrl: org.websiteUrl,
     publicEmail: org.publicEmail,

@@ -5,6 +5,7 @@ import {
   organizations,
   users,
   auditEvents,
+  agentProfiles,
 } from "@/db/schema";
 import { hashPassword } from "@/lib/auth/password";
 import { createOrganizationWithOwner } from "@/lib/orgs/create";
@@ -196,6 +197,76 @@ describe("organization profiles", () => {
     const pub = await getPublicOrganizationProfileBySlug("abc-props");
     expect(pub?.displayName).toBe("ABC Properties");
     expect(pub?.agents.some((a) => a.username === "abc-agent")).toBe(true);
+  });
+
+  it("falls back to public agent avatar when org logo is missing", async () => {
+    const user = await seedUser("logo-fb@example.com");
+    const org = await createOrganizationWithOwner(user.id, {
+      name: "Logo FB",
+      slug: "logo-fb-org",
+    });
+    await upsertOrganizationProfile(user.id, org.organizationId, {
+      displayName: "Logo FB Org",
+      visibility: "PUBLIC",
+    });
+    const profile = await upsertOwnAgentProfile(user.id, org.organizationId, {
+      publicUsername: "logo-fb-agent",
+      displayName: "Agent Photo",
+      visibility: "PUBLIC",
+    });
+    await getTestDb()
+      .update(agentProfiles)
+      .set({ avatarUrl: "/api/media/00000000-0000-4000-8000-000000000099" })
+      .where(eq(agentProfiles.id, profile.id));
+
+    const pub = await getPublicOrganizationProfileBySlug("logo-fb-org");
+    expect(pub?.logoUrl).toBe(
+      "/api/media/00000000-0000-4000-8000-000000000099",
+    );
+  });
+
+  it("prefers organization logo over agent avatar", async () => {
+    const user = await seedUser("logo-win@example.com");
+    const org = await createOrganizationWithOwner(user.id, {
+      name: "Logo Win",
+      slug: "logo-win-org",
+    });
+    await upsertOrganizationProfile(user.id, org.organizationId, {
+      displayName: "Logo Win Org",
+      logoUrl: "https://cdn.example.com/org-logo.png",
+      visibility: "PUBLIC",
+    });
+    const profile = await upsertOwnAgentProfile(user.id, org.organizationId, {
+      publicUsername: "logo-win-agent",
+      displayName: "Agent",
+      visibility: "PUBLIC",
+    });
+    await getTestDb()
+      .update(agentProfiles)
+      .set({ avatarUrl: "/api/media/agent-avatar" })
+      .where(eq(agentProfiles.id, profile.id));
+
+    const pub = await getPublicOrganizationProfileBySlug("logo-win-org");
+    expect(pub?.logoUrl).toBe("https://cdn.example.com/org-logo.png");
+  });
+
+  it("returns null logoUrl when neither org logo nor agent avatar exists", async () => {
+    const user = await seedUser("logo-none@example.com");
+    const org = await createOrganizationWithOwner(user.id, {
+      name: "Logo None",
+      slug: "logo-none-org",
+    });
+    await upsertOrganizationProfile(user.id, org.organizationId, {
+      displayName: "Logo None Org",
+      visibility: "PUBLIC",
+    });
+    await upsertOwnAgentProfile(user.id, org.organizationId, {
+      publicUsername: "logo-none-agent",
+      displayName: "Agent",
+      visibility: "PUBLIC",
+    });
+    const pub = await getPublicOrganizationProfileBySlug("logo-none-org");
+    expect(pub?.logoUrl).toBeNull();
   });
 });
 
