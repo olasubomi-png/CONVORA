@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
+import { getUserOrganizationContexts } from "@/lib/authz/context";
 import { logoutAction } from "@/app/actions/auth";
 import { AppShell } from "@/components/app-shell";
 
@@ -13,8 +14,15 @@ export default async function AppLayout({
     redirect("/login");
   }
 
+  const memberships = await getUserOrganizationContexts(session.user.id);
+  const primary = memberships[0];
+
   return (
-    <AppShell userName={session.user.fullName} logoutAction={logoutAction}>
+    <AppShell
+      userName={session.user.fullName}
+      logoutAction={logoutAction}
+      organizationId={primary?.organizationId ?? null}
+    >
       {children}
     </AppShell>
   );

@@ -45,6 +45,16 @@ const serverEnvSchema = z.object({
   PAYSTACK_SECRET_KEY: z.string().min(1).optional(),
   /** Paystack public key (safe for client checkout widgets). */
   PAYSTACK_PUBLIC_KEY: z.string().min(1).optional(),
+  /** Web Push VAPID public key (safe for browser). */
+  VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+  /** Web Push VAPID private key (server-only). */
+  VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+  /** mailto: or https: contact for VAPID. */
+  VAPID_SUBJECT: z.string().min(1).optional(),
+  /** Resend API key for transactional email (server-only). */
+  RESEND_API_KEY: z.string().min(1).optional(),
+  /** From address for notification emails. */
+  EMAIL_FROM: z.string().min(1).optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -59,6 +69,11 @@ export type EnvSource = {
   CHANNEL_SECRETS_KEY?: string;
   PAYSTACK_SECRET_KEY?: string;
   PAYSTACK_PUBLIC_KEY?: string;
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
 };
 
 function isValidChannelSecretsKey(value: string): boolean {
@@ -155,6 +170,11 @@ export function getServerEnv(): ServerEnv {
     CHANNEL_SECRETS_KEY: process.env.CHANNEL_SECRETS_KEY,
     PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY,
     PAYSTACK_PUBLIC_KEY: process.env.PAYSTACK_PUBLIC_KEY,
+    VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
+    VAPID_SUBJECT: process.env.VAPID_SUBJECT,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    EMAIL_FROM: process.env.EMAIL_FROM,
   });
 
   if (!parsed.success) {

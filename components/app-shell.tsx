@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 type NavItem = {
   href: string;
@@ -77,10 +78,12 @@ export function AppShell({
   children,
   userName,
   logoutAction,
+  organizationId,
 }: {
   children: React.ReactNode;
   userName: string;
   logoutAction: () => Promise<void>;
+  organizationId?: string | null;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -190,6 +193,9 @@ export function AppShell({
           <div className="flex flex-1 items-center gap-2 rounded-xl border border-[var(--cv-border)] bg-[var(--cv-surface-muted)] px-3 py-1.5 text-sm text-[var(--cv-fg-muted)]">
             <span className="truncate">Search conversations, customers…</span>
           </div>
+          {organizationId ? (
+            <NotificationBell organizationId={organizationId} />
+          ) : null}
         </header>
         <main className="flex-1">{children}</main>
       </div>

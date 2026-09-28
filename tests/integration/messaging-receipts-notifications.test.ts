@@ -13,7 +13,7 @@ import {
   markConversationSeenByVisitor,
   markConversationSeenByAgent,
 } from "@/lib/messaging/receipts";
-import { listNotificationsForUser } from "@/lib/notifications/notify";
+import { listNotificationsForUser, markNotificationRead } from "@/lib/notifications/notify";
 import { sendAgentMessage } from "@/lib/conversations/messages";
 import { getTestDb, setupTestEnv, truncateAllTables } from "../helpers/db";
 import { resetRateLimit } from "@/lib/rate-limit";
@@ -159,6 +159,28 @@ describe("agent notifications", () => {
     );
     expect(listed.unreadCount).toBeGreaterThanOrEqual(1);
     expect(listed.notifications[0]?.title).toBe("Notify Me");
+  });
+
+  it("marks individual notification as read", async () => {
+    const { owner, org, installation } = await setup();
+    const session = await createOrResumeVisitorSession({
+      publicKey: installation.publicKey,
+      origin: null,
+    });
+    await setVisitorIdentity(session.sessionToken, {
+      displayName: "Reader",
+    });
+    await sendVisitorMessage(session.sessionToken, "ping");
+    const listed = await listNotificationsForUser(
+      owner.id,
+      org.organizationId,
+    );
+    expect(listed.notifications.length).toBeGreaterThan(0);
+    const n = listed.notifications[0]!;
+    const updated = await markNotificationRead(owner.id, n.id);
+    expect(updated?.readAt).not.toBeNull();
+    const again = await markNotificationRead(owner.id, n.id);
+    expect(again?.readAt).not.toBeNull();
   });
 
   it("dedupes rapid notifications for same conversation", async () => {

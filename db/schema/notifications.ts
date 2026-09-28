@@ -43,6 +43,8 @@ export const agentNotifications = pgTable(
     channel: text("channel"),
     dedupeKey: text("dedupe_key").notNull(),
     readAt: timestamp("read_at", { withTimezone: true }),
+    emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
+    pushSentAt: timestamp("push_sent_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

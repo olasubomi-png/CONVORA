@@ -5,8 +5,13 @@ import {
   notificationPreferences,
   memberships,
   customers,
+  users,
+  organizations,
 } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/db-errors";
+import { sendPushToUser } from "@/lib/notifications/push";
+import { sendNotificationEmail } from "@/lib/notifications/email";
+import { getServerEnv } from "@/lib/env";
 
 export type NotifyNewMessageInput = {
   organizationId: string;
@@ -15,13 +20,13 @@ export type NotifyNewMessageInput = {
   customerId: string;
   channel: string;
   preview: string;
-  /** When set, skip notifying this membership (active viewer). */
   excludeMembershipId?: string | null;
 };
 
 /**
- * Create in-app notifications for active org members about a new customer message.
- * Deduped per membership + conversation within a short window via dedupe_key.
+ * Create in-app notifications and fan out to push/email per preferences.
+ * Deduped per membership + conversation within a short window.
+ * Never throws for delivery channel failures.
  */
 export async function notifyAgentsOfCustomerMessage(
   input: NotifyNewMessageInput,
@@ -31,6 +36,7 @@ export async function notifyAgentsOfCustomerMessage(
     .select({
       displayName: customers.displayName,
       organizationId: customers.organizationId,
+      avatarUrl: customers.avatarUrl,
     })
     .from(customers)
     .where(eq(customers.id, input.customerId))
@@ -39,13 +45,21 @@ export async function notifyAgentsOfCustomerMessage(
     return { created: 0 };
   }
 
+  const [org] = await db
+    .select({ name: organizations.name })
+    .from(organizations)
+    .where(eq(organizations.id, input.organizationId))
+    .limit(1);
+
   const members = await db
     .select({
       membershipId: memberships.id,
       userId: memberships.userId,
       organizationId: memberships.organizationId,
+      email: users.email,
     })
     .from(memberships)
+    .innerJoin(users, eq(memberships.userId, users.id))
     .where(
       and(
         eq(memberships.organizationId, input.organizationId),
@@ -53,13 +67,19 @@ export async function notifyAgentsOfCustomerMessage(
       ),
     );
 
-  const preview =
-    input.preview.trim().slice(0, 140) || "New message";
-  // Dedupe window: same conversation within ~2 minutes shares key bucket
-  const bucket = Math.floor(Date.now() / (120_000));
+  const preview = input.preview.trim().slice(0, 140) || "New message";
+  const bucket = Math.floor(Date.now() / 120_000);
   const dedupeKey = `msg:${input.conversationId}:${bucket}`;
 
   let created = 0;
+  let appUrl = "http://localhost:3000";
+  try {
+    appUrl = getServerEnv().APP_URL;
+  } catch {
+    appUrl = process.env.APP_URL ?? appUrl;
+  }
+  const conversationUrl = `${appUrl}/app/inbox?c=${input.conversationId}`;
+
   for (const m of members) {
     if (
       input.excludeMembershipId &&
@@ -73,42 +93,119 @@ export async function notifyAgentsOfCustomerMessage(
       .from(notificationPreferences)
       .where(eq(notificationPreferences.membershipId, m.membershipId))
       .limit(1);
-    if (prefs && !prefs.inAppEnabled) continue;
 
-    try {
-      await db.insert(agentNotifications).values({
-        organizationId: input.organizationId,
-        membershipId: m.membershipId,
-        userId: m.userId,
-        type: "conversation.message_received",
-        title: customer.displayName,
-        body: preview,
-        conversationId: input.conversationId,
-        messageId: input.messageId,
-        customerId: input.customerId,
-        channel: input.channel,
-        dedupeKey,
-      });
-      created += 1;
-    } catch (err) {
-      if (isUniqueViolation(err)) {
-        // Refresh body on existing deduped notification
-        await db
-          .update(agentNotifications)
-          .set({
-            body: preview,
-            messageId: input.messageId,
+    const inAppEnabled = prefs?.inAppEnabled !== false;
+    const pushEnabled = prefs?.pushEnabled !== false;
+    const emailEnabled = prefs?.emailEnabled !== false;
+    const digestSeconds = prefs?.emailDigestSeconds ?? 120;
+
+    if (!inAppEnabled && !pushEnabled && !emailEnabled) continue;
+
+    let notificationId: string | null = null;
+    let isNew = false;
+
+    if (inAppEnabled) {
+      try {
+        const [row] = await db
+          .insert(agentNotifications)
+          .values({
+            organizationId: input.organizationId,
+            membershipId: m.membershipId,
+            userId: m.userId,
+            type: "conversation.message_received",
             title: customer.displayName,
+            body: preview,
+            conversationId: input.conversationId,
+            messageId: input.messageId,
+            customerId: input.customerId,
+            channel: input.channel,
+            dedupeKey,
           })
+          .returning();
+        notificationId = row?.id ?? null;
+        isNew = true;
+        created += 1;
+      } catch (err) {
+        if (isUniqueViolation(err)) {
+          const [existing] = await db
+            .update(agentNotifications)
+            .set({
+              body: preview,
+              messageId: input.messageId,
+              title: customer.displayName,
+            })
+            .where(
+              and(
+                eq(agentNotifications.membershipId, m.membershipId),
+                eq(agentNotifications.dedupeKey, dedupeKey),
+              ),
+            )
+            .returning();
+          notificationId = existing?.id ?? null;
+          isNew = false;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    // Push — only on new in-app row or when in-app disabled but push on
+    if (pushEnabled && (isNew || !inAppEnabled)) {
+      try {
+        await sendPushToUser(m.userId, {
+          title: customer.displayName,
+          body: preview,
+          conversationId: input.conversationId,
+          organizationId: input.organizationId,
+          url: conversationUrl,
+        });
+        if (notificationId) {
+          await db
+            .update(agentNotifications)
+            .set({ pushSentAt: new Date() })
+            .where(eq(agentNotifications.id, notificationId));
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // Email with digest cooldown
+    if (emailEnabled && m.email) {
+      try {
+        const since = new Date(Date.now() - digestSeconds * 1000);
+        const [recentEmail] = await db
+          .select({ id: agentNotifications.id })
+          .from(agentNotifications)
           .where(
             and(
               eq(agentNotifications.membershipId, m.membershipId),
-              eq(agentNotifications.dedupeKey, dedupeKey),
+              eq(agentNotifications.conversationId, input.conversationId),
+              sql`${agentNotifications.emailSentAt} IS NOT NULL`,
+              sql`${agentNotifications.emailSentAt} > ${since}`,
             ),
-          );
-        continue;
+          )
+          .limit(1);
+
+        if (!recentEmail) {
+          const ok = await sendNotificationEmail({
+            to: m.email,
+            customerName: customer.displayName,
+            organizationName: org?.name,
+            channel: input.channel,
+            preview,
+            conversationUrl,
+          });
+          if (ok && notificationId) {
+            await db
+              .update(agentNotifications)
+              .set({ emailSentAt: new Date() })
+              .where(eq(agentNotifications.id, notificationId));
+          }
+        }
+      } catch {
+        /* ignore */
       }
-      throw err;
     }
   }
 
@@ -135,8 +232,24 @@ export async function listNotificationsForUser(
   if (!m) return { notifications: [], unreadCount: 0 };
 
   const rows = await db
-    .select()
+    .select({
+      id: agentNotifications.id,
+      type: agentNotifications.type,
+      title: agentNotifications.title,
+      body: agentNotifications.body,
+      conversationId: agentNotifications.conversationId,
+      messageId: agentNotifications.messageId,
+      customerId: agentNotifications.customerId,
+      channel: agentNotifications.channel,
+      readAt: agentNotifications.readAt,
+      createdAt: agentNotifications.createdAt,
+      customerAvatarUrl: customers.avatarUrl,
+    })
     .from(agentNotifications)
+    .leftJoin(
+      customers,
+      eq(customers.id, agentNotifications.customerId),
+    )
     .where(eq(agentNotifications.membershipId, m.id))
     .orderBy(sql`${agentNotifications.createdAt} DESC`)
     .limit(Math.min(limit, 100));
@@ -172,7 +285,12 @@ export async function markNotificationRead(
   const [updated] = await db
     .update(agentNotifications)
     .set({ readAt: new Date() })
-    .where(eq(agentNotifications.id, notificationId))
+    .where(
+      and(
+        eq(agentNotifications.id, notificationId),
+        eq(agentNotifications.userId, userId),
+      ),
+    )
     .returning();
   return updated ?? null;
 }

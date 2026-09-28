@@ -71,6 +71,8 @@ export function PublicWebChatWidget({
   const [composer, setComposer] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [emailInput, setEmailInput] = useState("");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [identitySaving, setIdentitySaving] = useState(false);
   const [booting, setBooting] = useState(false);
@@ -186,22 +188,58 @@ export function PublicWebChatWidget({
   useEffect(() => {
     if (open && token && !needsIdentity) {
       void loadMessages(token);
-      const tick = () => {
+      const id = window.setInterval(() => {
         void loadMessages(token);
-        void fetch("/api/web-chat/read", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-convora-visitor-token": token,
-          },
-          body: JSON.stringify({}),
-        }).catch(() => undefined);
-      };
-      const id = window.setInterval(tick, 4000);
-      tick();
+      }, 4000);
       return () => window.clearInterval(id);
     }
   }, [open, token, needsIdentity, loadMessages]);
+
+  // Mark agent messages as seen only when they are visible in the viewport
+  useEffect(() => {
+    if (!open || !token || needsIdentity || messages.length === 0) return;
+    const agentMsgs = messages.filter((m) => m.senderType !== "CUSTOMER");
+    if (agentMsgs.length === 0) return;
+
+    let debounce: number | undefined;
+    const seenIds = new Set<string>();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const id = (entry.target as HTMLElement).dataset.messageId;
+          if (id) seenIds.add(id);
+        }
+        if (seenIds.size === 0) return;
+        window.clearTimeout(debounce);
+        debounce = window.setTimeout(() => {
+          // Latest visible agent message by order in list
+          let upTo: string | null = null;
+          for (const m of agentMsgs) {
+            if (seenIds.has(m.id)) upTo = m.id;
+          }
+          if (!upTo) return;
+          void fetch("/api/web-chat/read", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-convora-visitor-token": token,
+            },
+            body: JSON.stringify({ upToMessageId: upTo }),
+          }).catch(() => undefined);
+        }, 500);
+      },
+      { root: null, threshold: 0.6 },
+    );
+
+    const nodes = document.querySelectorAll("[data-message-id][data-role='agent']");
+    nodes.forEach((n) => observer.observe(n));
+    return () => {
+      window.clearTimeout(debounce);
+      observer.disconnect();
+    };
+  }, [open, token, needsIdentity, messages]);
 
   useEffect(() => {
     scrollBottom();
@@ -231,7 +269,6 @@ export function PublicWebChatWidget({
       }
       setVisitorName(data.identity?.displayName ?? nameInput.trim());
       setNeedsIdentity(false);
-      const avatarFile = (window as unknown as { __wcAvatar?: File | null }).__wcAvatar;
       if (avatarFile) {
         try {
           const fd = new FormData();
@@ -244,7 +281,9 @@ export function PublicWebChatWidget({
         } catch {
           /* non-blocking */
         }
-        (window as unknown as { __wcAvatar?: File | null }).__wcAvatar = null;
+        if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+        setAvatarFile(null);
+        setAvatarPreview(null);
       }
       await loadMessages(token);
     } catch {
@@ -456,6 +495,14 @@ export function PublicWebChatWidget({
                   >
                     Photo <span className="font-normal text-[var(--cv-fg-muted)]">(optional)</span>
                   </label>
+                  {avatarPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={avatarPreview}
+                      alt="Selected photo"
+                      className="mb-2 h-14 w-14 rounded-full object-cover"
+                    />
+                  ) : null}
                   <input
                     id="wc-avatar"
                     type="file"
@@ -463,7 +510,9 @@ export function PublicWebChatWidget({
                     className="block w-full text-sm"
                     onChange={(e) => {
                       const f = e.target.files?.[0] ?? null;
-                      (window as unknown as { __wcAvatar?: File | null }).__wcAvatar = f;
+                      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+                      setAvatarFile(f);
+                      setAvatarPreview(f ? URL.createObjectURL(f) : null);
                     }}
                   />
                 </div>
@@ -516,6 +565,8 @@ export function PublicWebChatWidget({
               return (
                 <div
                   key={m.id}
+                  data-message-id={m.id}
+                  data-role={mine ? "customer" : "agent"}
                   className={cn("flex", mine ? "justify-end" : "justify-start")}
                 >
                   <div
