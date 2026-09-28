@@ -8,6 +8,7 @@ import type { ProfileActionResult } from "@/app/actions/profiles";
 type Props = {
   organizationId: string;
   action: (formData: FormData) => Promise<ProfileActionResult>;
+  onSuccess?: () => void;
   defaults?: {
     publicUsername?: string;
     displayName?: string;
@@ -20,7 +21,7 @@ type Props = {
   };
 };
 
-export function AgentProfileForm({ organizationId, action, defaults }: Props) {
+export function AgentProfileForm({ organizationId, action, onSuccess, defaults }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -35,7 +36,8 @@ export function AgentProfileForm({ organizationId, action, defaults }: Props) {
         setError(result.error);
       } else {
         setSuccess(true);
-        window.location.reload();
+        if (onSuccess) onSuccess();
+        else window.location.reload();
       }
     });
   }

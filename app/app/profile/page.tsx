@@ -48,6 +48,7 @@ export default async function AgentProfileManagePage() {
         visibility={profile?.visibility ?? null}
         displayName={profile?.displayName ?? auth.user.fullName}
         professionalTitle={profile?.professionalTitle ?? null}
+        bio={profile?.bio ?? null}
         avatarUrl={profile?.avatarUrl ?? null}
         profileDefaults={{
           publicUsername: profile?.publicUsername,
