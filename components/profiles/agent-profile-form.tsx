@@ -31,8 +31,12 @@ export function AgentProfileForm({ organizationId, action, defaults }: Props) {
     formData.set("organizationId", organizationId);
     startTransition(async () => {
       const result = await action(formData);
-      if (!result.ok) setError(result.error);
-      else setSuccess(true);
+      if (!result.ok) {
+        setError(result.error);
+      } else {
+        setSuccess(true);
+        window.location.reload();
+      }
     });
   }
 
