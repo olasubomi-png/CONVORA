@@ -8,7 +8,10 @@ import { VerificationBadge } from "@/components/profiles/verification-badge";
 import { PublicWebChatWidget } from "@/components/web-chat/public-widget";
 import { getServerEnv } from "@/lib/env";
 
-type Props = { params: Promise<{ slug: string }> };
+type Props = {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ chat?: string }>;
+};
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -46,8 +49,11 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
-export default async function PublicOrgPage({ params }: Props) {
+export default async function PublicOrgPage({ params, searchParams }: Props) {
   const { slug } = await params;
+  const sp = await searchParams;
+  const chatPrimary = sp.chat === "1" || sp.chat === "true";
+
   const [profile, webChat] = await Promise.all([
     getPublicOrganizationProfileBySlug(slug),
     getPublicWebChatEmbedByOrgSlug(slug),
@@ -59,8 +65,10 @@ export default async function PublicOrgPage({ params }: Props) {
     Boolean(profile.publicPhone) ||
     Boolean(profile.websiteUrl);
 
+  const chatAvailable = Boolean(webChat?.publicKey);
+
   return (
-    <div className="min-h-screen bg-[var(--cv-bg)] pb-24 sm:pb-0">
+    <div className="min-h-screen bg-[var(--cv-bg)]">
       <header className="border-b border-[var(--cv-border)] bg-white">
         <Container className="flex h-14 items-center justify-between">
           <Link
@@ -72,220 +80,154 @@ export default async function PublicOrgPage({ params }: Props) {
             </span>
             CONVORA
           </Link>
-          <span className="text-xs text-[var(--cv-fg-muted)]">Public profile</span>
+          {chatPrimary && chatAvailable ? (
+            <Link
+              href={`/org/${profile.slug}`}
+              className="text-sm text-[var(--cv-fg-muted)] hover:text-[var(--cv-fg)]"
+            >
+              About
+            </Link>
+          ) : chatAvailable ? (
+            <Link
+              href={`/org/${profile.slug}?chat=1`}
+              className="rounded-lg bg-[var(--cv-accent)] px-3 py-1.5 text-sm font-medium text-white"
+            >
+              Message
+            </Link>
+          ) : (
+            <span className="text-xs text-[var(--cv-fg-muted)]">Public profile</span>
+          )}
         </Container>
       </header>
 
       <main>
-        <section className="border-b border-[var(--cv-border)] bg-white">
-          <Container className="py-10 md:py-14">
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-              {profile.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={profile.logoUrl}
-                  alt=""
-                  className="h-20 w-20 rounded-2xl border border-[var(--cv-border)] object-cover"
-                />
-              ) : (
-                <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[var(--cv-accent-soft)] text-xl font-semibold text-[var(--cv-accent)]">
-                  {initials(profile.displayName)}
-                </span>
-              )}
-              <div className="min-w-0 flex-1">
+        {chatAvailable && (chatPrimary || true) ? (
+          <section className="border-b border-[var(--cv-border)] bg-[var(--cv-bg)] py-4 sm:py-8">
+            <Container className="max-w-xl">
+              {!chatPrimary ? (
+                <div className="mb-4 flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-[var(--cv-accent-soft,#e8f2ed)] text-sm font-semibold text-[var(--cv-accent)]">
+                    {profile.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={profile.logoUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      initials(profile.displayName)
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h1 className="truncate text-lg font-semibold tracking-tight">
+                        {profile.displayName}
+                      </h1>
+                      <VerificationBadge status={profile.verificationStatus} />
+                    </div>
+                    <p className="text-xs text-[var(--cv-fg-muted)]">
+                      Message the team directly — no account required
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+              <PublicWebChatWidget
+                publicKey={webChat!.publicKey}
+                displayName={webChat!.displayName || profile.displayName}
+                welcomeMessage={webChat!.welcomeMessage}
+                avatarUrl={profile.logoUrl}
+                profileHref={`/org/${profile.slug}#about`}
+                verified={profile.verificationStatus === "VERIFIED"}
+                autoOpen={chatPrimary}
+                variant={chatPrimary ? "full" : "full"}
+              />
+            </Container>
+          </section>
+        ) : null}
+
+        <section
+          id="about"
+          className="border-b border-[var(--cv-border)] bg-white py-10"
+        >
+          <Container className="max-w-2xl">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--cv-fg-muted)]">
+              About
+            </h2>
+            <div className="mt-4 flex items-start gap-4">
+              <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[var(--cv-accent-soft,#e8f2ed)] text-lg font-semibold text-[var(--cv-accent)]">
+                {profile.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={profile.logoUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  initials(profile.displayName)
+                )}
+              </span>
+              <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-2xl font-semibold tracking-tight text-[var(--cv-fg)] md:text-3xl">
+                  <h3 className="text-xl font-semibold tracking-tight">
                     {profile.displayName}
-                  </h1>
+                  </h3>
                   <VerificationBadge status={profile.verificationStatus} />
                 </div>
                 {profile.description ? (
-                  <p className="mt-3 max-w-2xl text-base leading-7 text-[var(--cv-fg-secondary)]">
+                  <p className="mt-2 text-sm leading-6 text-[var(--cv-fg-secondary)]">
                     {profile.description}
                   </p>
-                ) : null}
-                <dl className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--cv-fg-muted)]">
-                  {profile.location ? (
-                    <div>
-                      <dt className="sr-only">Location</dt>
-                      <dd>{profile.location}</dd>
-                    </div>
-                  ) : null}
-                  {profile.serviceArea ? (
-                    <div>
-                      <dt className="sr-only">Service area</dt>
-                      <dd>{profile.serviceArea}</dd>
-                    </div>
-                  ) : null}
-                </dl>
-              </div>
-            </div>
-          </Container>
-        </section>
-
-        {/* Contact / Web Chat */}
-        <section className="border-b border-[var(--cv-border)]">
-          <Container className="py-8 md:py-10">
-            <div className="grid gap-6 lg:grid-cols-3">
-              <div className="lg:col-span-2">
-                {webChat ? (
-                  <div className="rounded-2xl border border-[var(--cv-border)] bg-white p-5 shadow-[var(--cv-shadow-sm)]">
-                    <p className="text-sm font-semibold text-[var(--cv-fg)]">
-                      Have a question?
-                    </p>
-                    <p className="mt-1 text-sm text-[var(--cv-fg-muted)]">
-                      Chat directly with {profile.displayName}. You do not need a
-                      CONVORA account.
-                    </p>
-                    <div className="mt-4">
-                      <PublicWebChatWidget
-                        publicKey={webChat.publicKey}
-                        displayName={webChat.displayName}
-                        welcomeMessage={webChat.welcomeMessage}
-                      />
-                    </div>
-                  </div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-[var(--cv-border)] bg-white p-5">
-                    <p className="text-sm font-semibold text-[var(--cv-fg)]">
-                      Contact
-                    </p>
-                    {hasContact ? (
-                      <ul className="mt-3 space-y-2 text-sm text-[var(--cv-fg-secondary)]">
-                        {profile.publicEmail ? (
-                          <li>
-                            <a
-                              href={`mailto:${profile.publicEmail}`}
-                              className="text-[var(--cv-accent)] hover:underline"
-                            >
-                              {profile.publicEmail}
-                            </a>
-                          </li>
-                        ) : null}
-                        {profile.publicPhone ? (
-                          <li>
-                            <a
-                              href={`tel:${profile.publicPhone}`}
-                              className="hover:underline"
-                            >
-                              {profile.publicPhone}
-                            </a>
-                          </li>
-                        ) : null}
-                        {profile.websiteUrl ? (
-                          <li>
-                            <a
-                              href={profile.websiteUrl}
-                              className="text-[var(--cv-accent)] hover:underline"
-                              rel="noopener noreferrer"
-                              target="_blank"
-                            >
-                              Website
-                            </a>
-                          </li>
-                        ) : null}
-                      </ul>
-                    ) : (
-                      <p className="mt-2 text-sm text-[var(--cv-fg-muted)]">
-                        This business has not published chat or contact details
-                        yet.
-                      </p>
-                    )}
-                  </div>
+                  <p className="mt-2 text-sm text-[var(--cv-fg-muted)]">
+                    This organization is on CONVORA.
+                  </p>
                 )}
               </div>
-
-              {hasContact && webChat ? (
-                <aside className="rounded-2xl border border-[var(--cv-border)] bg-white p-5 shadow-[var(--cv-shadow-sm)]">
-                  <p className="text-sm font-semibold">Also reachable at</p>
-                  <ul className="mt-3 space-y-2 text-sm text-[var(--cv-fg-secondary)]">
-                    {profile.publicEmail ? (
-                      <li>
-                        <a
-                          href={`mailto:${profile.publicEmail}`}
-                          className="text-[var(--cv-accent)] hover:underline"
-                        >
-                          {profile.publicEmail}
-                        </a>
-                      </li>
-                    ) : null}
-                    {profile.publicPhone ? <li>{profile.publicPhone}</li> : null}
-                    {profile.websiteUrl ? (
-                      <li>
-                        <a
-                          href={profile.websiteUrl}
-                          className="text-[var(--cv-accent)] hover:underline"
-                          rel="noopener noreferrer"
-                          target="_blank"
-                        >
-                          Website
-                        </a>
-                      </li>
-                    ) : null}
-                  </ul>
-                </aside>
-              ) : null}
             </div>
-          </Container>
-        </section>
 
-        <section>
-          <Container className="py-10 md:py-12">
-            <h2 className="text-lg font-semibold tracking-tight">Team</h2>
-            {profile.agents.length === 0 ? (
-              <p className="mt-4 text-sm text-[var(--cv-fg-muted)]">
-                No public agents yet.
-              </p>
-            ) : (
-              <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {profile.agents.map((agent) => (
-                  <li key={agent.username}>
-                    <Link
-                      href={`/agents/${agent.username}`}
-                      className="block rounded-2xl border border-[var(--cv-border)] bg-white p-5 shadow-[var(--cv-shadow-sm)] transition-colors hover:border-[var(--cv-accent)]"
+            {hasContact ? (
+              <div className="mt-6 space-y-1 text-sm text-[var(--cv-fg-secondary)]">
+                {profile.publicEmail ? (
+                  <p>
+                    Email:{" "}
+                    <a
+                      className="text-[var(--cv-accent)] hover:underline"
+                      href={`mailto:${profile.publicEmail}`}
                     >
-                      <div className="flex items-center gap-3">
-                        {agent.avatarUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={agent.avatarUrl}
-                            alt=""
-                            className="h-11 w-11 rounded-full object-cover"
-                          />
-                        ) : (
-                          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
-                            {initials(agent.displayName)}
-                          </span>
-                        )}
-                        <div className="min-w-0">
-                          <p className="truncate font-medium text-[var(--cv-fg)]">
-                            {agent.displayName}
-                          </p>
-                          {agent.professionalTitle ? (
-                            <p className="truncate text-sm text-[var(--cv-fg-muted)]">
-                              {agent.professionalTitle}
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="mt-3">
-                        <VerificationBadge status={agent.verificationStatus} />
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
+                      {profile.publicEmail}
+                    </a>
+                  </p>
+                ) : null}
+                {profile.publicPhone ? <p>Phone: {profile.publicPhone}</p> : null}
+                {profile.websiteUrl ? (
+                  <p>
+                    Website:{" "}
+                    <a
+                      className="text-[var(--cv-accent)] hover:underline"
+                      href={profile.websiteUrl}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      {profile.websiteUrl}
+                    </a>
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {chatAvailable ? (
+              <p className="mt-6">
+                <Link
+                  href={`/org/${profile.slug}?chat=1`}
+                  className="text-sm font-medium text-[var(--cv-accent)] hover:underline"
+                >
+                  Open conversation →
+                </Link>
+              </p>
+            ) : null}
           </Container>
         </section>
       </main>
-
-      <footer className="border-t border-[var(--cv-border)] bg-white py-6 text-center text-xs text-[var(--cv-fg-muted)]">
-        Powered by{" "}
-        <Link href="/" className="font-medium text-[var(--cv-fg)] hover:underline">
-          CONVORA
-        </Link>
-      </footer>
     </div>
   );
 }

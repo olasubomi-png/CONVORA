@@ -41,6 +41,12 @@ type Props = {
   userId: string;
 };
 
+function friendlyCustomerName(name: string | null | undefined): string {
+  const n = (name ?? "").trim();
+  if (!n || n === "Website visitor" || n === "New visitor") return "New visitor";
+  return n;
+}
+
 function channelTone(
   channel: string,
 ): "whatsapp" | "webchat" | "email" | "instagram" | "facebook" | "neutral" {
@@ -92,7 +98,7 @@ export function InboxShell({
   const [detail, setDetail] = useState<{
     status: string;
     priority: string;
-    customerName: string;
+    customerName: string; // may be 'New visitor' fallback
   } | null>(null);
   const [composer, setComposer] = useState("");
   const [pendingImage, setPendingImage] = useState<File | null>(null);
@@ -297,12 +303,12 @@ export function InboxShell({
                           : "bg-slate-100 text-slate-600",
                       )}
                     >
-                      {initials(c.customer.displayName)}
+                      {initials(friendlyCustomerName(c.customer.displayName))}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-sm font-medium text-[var(--cv-fg)]">
-                          {c.customer.displayName}
+                          {friendlyCustomerName(c.customer.displayName)}
                         </p>
                         <span className="shrink-0 text-[11px] text-[var(--cv-fg-subtle)]">
                           {formatTime(c.lastMessageAt ?? c.createdAt)}
@@ -359,11 +365,11 @@ export function InboxShell({
                   ←
                 </button>
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--cv-accent-soft)] text-xs font-semibold text-[var(--cv-accent)]">
-                  {initials(detail?.customerName ?? "C")}
+                  {initials(friendlyCustomerName(detail?.customerName))}
                 </span>
                 <div>
                   <h2 className="text-sm font-semibold text-[var(--cv-fg)]">
-                    {detail?.customerName ?? "Conversation"}
+                    {friendlyCustomerName(detail?.customerName)}
                   </h2>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                     {selectedConv ? (
@@ -565,7 +571,7 @@ export function InboxShell({
           <div className="border-b border-[var(--cv-border)] px-4 py-3">
             <p className="text-sm font-semibold text-[var(--cv-fg)]">Customer</p>
             <p className="mt-1 text-sm text-[var(--cv-fg-secondary)]">
-              {detail?.customerName ?? "—"}
+              {friendlyCustomerName(detail?.customerName)}
             </p>
           </div>
           <div className="flex-1 overflow-y-auto p-3">

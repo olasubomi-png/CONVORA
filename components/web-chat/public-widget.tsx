@@ -1,40 +1,87 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-type Attachment = { id?: string; mediaUrl: string; mimeType?: string };
+type Attachment = { id: string; mediaUrl: string; mimeType: string };
 
-type Msg = {
+type ChatMessage = {
   id: string;
   body: string;
   senderType: string;
   createdAt: string;
   attachments?: Attachment[];
+  pending?: boolean;
 };
 
-const TOKEN_KEY = "cv_wc_session";
+type Props = {
+  publicKey: string;
+  displayName: string;
+  welcomeMessage?: string | null;
+  avatarUrl?: string | null;
+  profileHref?: string | null;
+  verified?: boolean;
+  /** Open chat automatically (e.g. ?chat=1) */
+  autoOpen?: boolean;
+  /** full = primary page experience; launcher = button + modal */
+  variant?: "launcher" | "full";
+};
+
+const TOKEN_KEY = "convora_wc_session";
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function formatTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
 
 export function PublicWebChatWidget({
   publicKey,
   displayName,
   welcomeMessage,
-}: {
-  publicKey: string;
-  displayName: string;
-  welcomeMessage?: string | null;
-}) {
-  const [open, setOpen] = useState(false);
+  avatarUrl,
+  profileHref,
+  verified,
+  autoOpen = false,
+  variant = "launcher",
+}: Props) {
+  const [open, setOpen] = useState(autoOpen || variant === "full");
   const [token, setToken] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Msg[]>([]);
+  const [needsIdentity, setNeedsIdentity] = useState(true);
+  const [visitorName, setVisitorName] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [composer, setComposer] = useState("");
+  const [nameInput, setNameInput] = useState("");
+  const [emailInput, setEmailInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [identitySaving, setIdentitySaving] = useState(false);
+  const [booting, setBooting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [pendingPreview, setPendingPreview] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [booting, setBooting] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const welcome =
+    welcomeMessage?.trim() ||
+    `Hi, I'm ${displayName.split(" ")[0] || displayName}. How can I help you today?`;
 
   const scrollBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -67,7 +114,11 @@ export function PublicWebChatWidget({
       const nextToken = data.sessionToken as string;
       window.localStorage.setItem(TOKEN_KEY, nextToken);
       setToken(nextToken);
-      return nextToken;
+      setNeedsIdentity(Boolean(data.needsIdentity));
+      if (data.identity?.displayName) {
+        setVisitorName(data.identity.displayName as string);
+      }
+      return nextToken as string;
     } catch {
       setError("You're offline. Check your connection and try again.");
       return null;
@@ -111,23 +162,67 @@ export function PublicWebChatWidget({
   async function openChat() {
     setOpen(true);
     const sessionToken = token ?? (await startSession());
-    if (sessionToken) {
+    if (sessionToken && !needsIdentity) {
       await loadMessages(sessionToken);
     }
   }
 
   useEffect(() => {
-    if (open && token) {
+    if ((autoOpen || variant === "full") && !token) {
+      void (async () => {
+        const t = await startSession();
+        if (t) {
+          // needsIdentity state set inside startSession; load after tick
+        }
+      })();
+    }
+  }, [autoOpen, variant, token, startSession]);
+
+  useEffect(() => {
+    if (open && token && !needsIdentity) {
+      void loadMessages(token);
       const id = window.setInterval(() => {
         void loadMessages(token);
       }, 4000);
       return () => window.clearInterval(id);
     }
-  }, [open, token, loadMessages]);
+  }, [open, token, needsIdentity, loadMessages]);
 
   useEffect(() => {
     scrollBottom();
-  }, [messages]);
+  }, [messages, needsIdentity]);
+
+  async function submitIdentity(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token || identitySaving) return;
+    setIdentitySaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/web-chat/identity", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-convora-visitor-token": token,
+        },
+        body: JSON.stringify({
+          displayName: nameInput,
+          email: emailInput.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error?.message ?? "Could not save your details.");
+        return;
+      }
+      setVisitorName(data.identity?.displayName ?? nameInput.trim());
+      setNeedsIdentity(false);
+      await loadMessages(token);
+    } catch {
+      setError("You're offline. Check your connection and try again.");
+    } finally {
+      setIdentitySaving(false);
+    }
+  }
 
   function clearPendingImage() {
     if (pendingPreview) URL.revokeObjectURL(pendingPreview);
@@ -136,22 +231,38 @@ export function PublicWebChatWidget({
     if (fileRef.current) fileRef.current.value = "";
   }
 
-  function onPickImage(file: File | null) {
-    if (!file) return;
-    if (pendingPreview) URL.revokeObjectURL(pendingPreview);
-    setPendingImage(file);
-    setPendingPreview(URL.createObjectURL(file));
-  }
-
   async function send() {
-    if ((!composer.trim() && !pendingImage) || sending) return;
+    if ((!composer.trim() && !pendingImage) || sending || needsIdentity) return;
     let sessionToken = token;
     if (!sessionToken) {
       sessionToken = await startSession();
       if (!sessionToken) return;
     }
+    const bodyText = composer.trim();
     setSending(true);
     setError(null);
+    const optimisticId = `local-${Date.now()}`;
+    if (bodyText || pendingPreview) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: optimisticId,
+          body: bodyText || " ",
+          senderType: "CUSTOMER",
+          createdAt: new Date().toISOString(),
+          pending: true,
+          attachments: pendingPreview
+            ? [
+                {
+                  id: "local",
+                  mediaUrl: pendingPreview,
+                  mimeType: "image/*",
+                },
+              ]
+            : [],
+        },
+      ]);
+    }
     try {
       let mediaId: string | undefined;
       if (pendingImage) {
@@ -165,6 +276,7 @@ export function PublicWebChatWidget({
         });
         const upData = await up.json();
         if (!up.ok) {
+          setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
           setError(upData.error?.message ?? "Image upload failed.");
           return;
         }
@@ -178,12 +290,13 @@ export function PublicWebChatWidget({
           "x-convora-visitor-token": sessionToken,
         },
         body: JSON.stringify({
-          body: composer.trim() || (mediaId ? " " : ""),
+          body: bodyText || (mediaId ? " " : ""),
           mediaId,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
         setError(data.error?.message ?? "Could not send message.");
         return;
       }
@@ -191,10 +304,332 @@ export function PublicWebChatWidget({
       clearPendingImage();
       await loadMessages(sessionToken);
     } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setError("You're offline. Check your connection and try again.");
     } finally {
       setSending(false);
     }
+  }
+
+  function onComposerKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void send();
+    }
+  }
+
+  const chatPanel = (
+    <div
+      className={cn(
+        "flex flex-col bg-white",
+        variant === "full"
+          ? "h-[min(100dvh,900px)] min-h-[28rem] w-full overflow-hidden rounded-2xl border border-[var(--cv-border)] shadow-sm"
+          : "h-[min(100dvh,640px)] w-full max-w-md overflow-hidden rounded-t-2xl sm:h-[min(90dvh,640px)] sm:rounded-2xl",
+      )}
+    >
+      {/* Header */}
+      <header className="flex shrink-0 items-center gap-3 border-b border-[var(--cv-border)] px-3 py-2.5">
+        {variant === "launcher" ? (
+          <button
+            type="button"
+            aria-label="Close chat"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-[var(--cv-fg-muted)] hover:bg-[#f3f3f1] sm:hidden"
+            onClick={() => setOpen(false)}
+          >
+            ←
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          onClick={() => setInfoOpen(true)}
+          aria-label={`About ${displayName}`}
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--cv-accent-soft,#e8f2ed)] text-xs font-semibold text-[var(--cv-accent)]">
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarUrl}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              initials(displayName)
+            )}
+          </span>
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5">
+              <span className="truncate text-sm font-semibold text-[var(--cv-fg)]">
+                {displayName}
+              </span>
+              {verified ? (
+                <span className="text-[10px] font-medium text-[var(--cv-accent)]">
+                  ✓
+                </span>
+              ) : null}
+            </span>
+            <span className="block truncate text-xs text-[var(--cv-fg-muted)]">
+              Usually replies during business hours
+            </span>
+          </span>
+        </button>
+        {variant === "launcher" ? (
+          <button
+            type="button"
+            aria-label="Close"
+            className="hidden h-10 w-10 items-center justify-center rounded-full text-[var(--cv-fg-muted)] hover:bg-[#f3f3f1] sm:flex"
+            onClick={() => setOpen(false)}
+          >
+            ✕
+          </button>
+        ) : null}
+      </header>
+
+      {/* Body */}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f7f7f5] px-3 py-4">
+        {booting ? (
+          <p className="text-center text-sm text-[var(--cv-fg-muted)]">
+            Connecting…
+          </p>
+        ) : needsIdentity ? (
+          <div className="mx-auto max-w-sm space-y-4">
+            <div className="rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-sm leading-6 text-[var(--cv-fg)] shadow-sm">
+              {welcome}
+            </div>
+            <div className="rounded-2xl border border-[var(--cv-border)] bg-white p-4 shadow-sm">
+              <h2 className="text-base font-semibold text-[var(--cv-fg)]">
+                Let&apos;s get you connected
+              </h2>
+              <p className="mt-1 text-xs text-[var(--cv-fg-muted)]">
+                Before we start, tell us your name. No account required.
+              </p>
+              <form onSubmit={(e) => void submitIdentity(e)} className="mt-4 space-y-3">
+                <div>
+                  <label
+                    htmlFor="wc-name"
+                    className="mb-1 block text-xs font-medium text-[var(--cv-fg)]"
+                  >
+                    Name
+                  </label>
+                  <input
+                    id="wc-name"
+                    required
+                    minLength={2}
+                    maxLength={120}
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    autoComplete="name"
+                    className="w-full rounded-xl border border-[var(--cv-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--cv-accent)] focus:ring-2 focus:ring-[var(--cv-accent)]/15"
+                    placeholder="Your name"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="wc-email"
+                    className="mb-1 block text-xs font-medium text-[var(--cv-fg)]"
+                  >
+                    Email <span className="font-normal text-[var(--cv-fg-muted)]">(optional)</span>
+                  </label>
+                  <input
+                    id="wc-email"
+                    type="email"
+                    maxLength={254}
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    autoComplete="email"
+                    className="w-full rounded-xl border border-[var(--cv-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--cv-accent)] focus:ring-2 focus:ring-[var(--cv-accent)]/15"
+                    placeholder="you@example.com"
+                  />
+                </div>
+                {error ? (
+                  <p className="text-sm text-red-700" role="alert">
+                    {error}
+                  </p>
+                ) : null}
+                <button
+                  type="submit"
+                  disabled={identitySaving || nameInput.trim().length < 2}
+                  className="flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--cv-accent)] text-sm font-medium text-white hover:opacity-95 disabled:opacity-50"
+                >
+                  {identitySaving ? "Continuing…" : "Continue to chat"}
+                </button>
+              </form>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            <div className="rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-sm leading-6 text-[var(--cv-fg)] shadow-sm">
+              {welcome}
+            </div>
+            {messages.length === 0 ? (
+              <p className="py-6 text-center text-xs text-[var(--cv-fg-muted)]">
+                Send a message to start the conversation
+                {visitorName ? `, ${visitorName.split(" ")[0]}` : ""}.
+              </p>
+            ) : null}
+            {messages.map((m) => {
+              const mine = m.senderType === "CUSTOMER";
+              return (
+                <div
+                  key={m.id}
+                  className={cn("flex", mine ? "justify-end" : "justify-start")}
+                >
+                  <div
+                    className={cn(
+                      "max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-5 shadow-sm",
+                      mine
+                        ? "rounded-br-md bg-[var(--cv-accent)] text-white"
+                        : "rounded-bl-md bg-white text-[var(--cv-fg)]",
+                    )}
+                  >
+                    {m.body.trim() && m.body.trim() !== " " ? (
+                      <p className="whitespace-pre-wrap">{m.body}</p>
+                    ) : null}
+                    {m.attachments?.map((a) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={a.id}
+                        src={a.mediaUrl}
+                        alt="Attachment"
+                        className="mt-1.5 max-h-48 rounded-lg object-cover"
+                      />
+                    ))}
+                    <p
+                      className={cn(
+                        "mt-1 text-[10px]",
+                        mine ? "text-white/70" : "text-[var(--cv-fg-muted)]",
+                      )}
+                    >
+                      {m.pending ? "Sending…" : formatTime(m.createdAt)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={bottomRef} />
+          </div>
+        )}
+      </div>
+
+      {/* Composer */}
+      {!needsIdentity ? (
+        <div className="shrink-0 border-t border-[var(--cv-border)] bg-white px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+          {pendingPreview ? (
+            <div className="mb-2 flex items-center gap-2 px-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={pendingPreview}
+                alt="Selected"
+                className="h-14 w-14 rounded-lg object-cover"
+              />
+              <button
+                type="button"
+                className="text-xs underline"
+                onClick={clearPendingImage}
+              >
+                Remove
+              </button>
+            </div>
+          ) : null}
+          {error ? (
+            <p className="mb-1 px-1 text-xs text-red-700" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <div className="flex items-end gap-1.5">
+            <button
+              type="button"
+              aria-label="Attach image"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--cv-fg-muted)] hover:bg-[#f3f3f1]"
+              onClick={() => fileRef.current?.click()}
+              disabled={sending}
+            >
+              +
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                if (pendingPreview) URL.revokeObjectURL(pendingPreview);
+                setPendingImage(f);
+                setPendingPreview(f ? URL.createObjectURL(f) : null);
+              }}
+            />
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={composer}
+              onChange={(e) => setComposer(e.target.value)}
+              onKeyDown={onComposerKey}
+              placeholder="Message…"
+              disabled={sending}
+              className="max-h-28 min-h-[44px] flex-1 resize-none rounded-2xl border border-[var(--cv-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--cv-accent)]"
+            />
+            <button
+              type="button"
+              aria-label="Send message"
+              disabled={sending || (!composer.trim() && !pendingImage)}
+              onClick={() => void send()}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--cv-accent)] text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {sending ? "…" : "↑"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Info sheet */}
+      {infoOpen ? (
+        <div
+          className="absolute inset-0 z-10 flex flex-col bg-white"
+          role="dialog"
+          aria-label="Profile info"
+        >
+          <header className="flex items-center gap-2 border-b border-[var(--cv-border)] px-3 py-2.5">
+            <button
+              type="button"
+              aria-label="Back"
+              className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-[#f3f3f1]"
+              onClick={() => setInfoOpen(false)}
+            >
+              ←
+            </button>
+            <h2 className="text-sm font-semibold">About</h2>
+          </header>
+          <div className="flex flex-1 flex-col items-center gap-3 p-6 text-center">
+            <span className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-[var(--cv-accent-soft,#e8f2ed)] text-lg font-semibold text-[var(--cv-accent)]">
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                initials(displayName)
+              )}
+            </span>
+            <div>
+              <p className="text-lg font-semibold">{displayName}</p>
+              <p className="text-sm text-[var(--cv-fg-muted)]">
+                Usually replies during business hours
+              </p>
+            </div>
+            {profileHref ? (
+              <Link
+                href={profileHref}
+                className="mt-2 rounded-xl border border-[var(--cv-border)] px-4 py-2.5 text-sm font-medium hover:bg-[#f8f8f7]"
+              >
+                View full profile
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  if (variant === "full") {
+    return <div className="relative w-full">{chatPanel}</div>;
   }
 
   return (
@@ -203,18 +638,18 @@ export function PublicWebChatWidget({
         <button
           type="button"
           onClick={() => void openChat()}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--cv-accent)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--cv-accent-hover)]"
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--cv-accent)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--cv-accent-hover)]"
         >
-          Chat with us
+          Message {displayName.split(" ")[0] || "us"}
         </button>
       </div>
 
       <button
         type="button"
         onClick={() => void openChat()}
-        className="hidden w-full items-center justify-center gap-2 rounded-xl bg-[var(--cv-accent)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--cv-accent-hover)] sm:flex"
+        className="hidden min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--cv-accent)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--cv-accent-hover)] sm:flex"
       >
-        Chat with us
+        Message {displayName.split(" ")[0] || "us"}
       </button>
 
       {open ? (
@@ -224,159 +659,7 @@ export function PublicWebChatWidget({
           aria-modal="true"
           aria-label={`Chat with ${displayName}`}
         >
-          <div className="flex h-[min(100dvh,640px)] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:h-[560px] sm:rounded-2xl">
-            <header className="flex items-center gap-3 border-b border-[var(--cv-border)] px-4 py-3">
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="rounded-lg p-1.5 text-[var(--cv-fg-muted)] hover:bg-slate-100"
-                aria-label="Close chat"
-              >
-                ←
-              </button>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-[var(--cv-fg)]">
-                  {displayName}
-                </p>
-                <p className="text-[11px] text-[var(--cv-fg-muted)]">
-                  Usually replies during business hours
-                </p>
-              </div>
-            </header>
-
-            <div className="flex-1 space-y-3 overflow-y-auto bg-[var(--cv-surface-muted)] px-4 py-4">
-              {booting ? (
-                <p className="text-center text-sm text-[var(--cv-fg-muted)]">
-                  Opening chat…
-                </p>
-              ) : null}
-              {welcomeMessage && messages.length === 0 && !booting ? (
-                <p className="text-center text-sm text-[var(--cv-fg-muted)]">
-                  {welcomeMessage}
-                </p>
-              ) : null}
-              {messages.map((m) => {
-                const outbound =
-                  m.senderType === "CUSTOMER" || m.senderType === "VISITOR";
-                return (
-                  <div
-                    key={m.id}
-                    className={cn(
-                      "flex",
-                      outbound ? "justify-end" : "justify-start",
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm",
-                        outbound
-                          ? "rounded-br-md bg-[var(--cv-accent)] text-white"
-                          : "rounded-bl-md border border-[var(--cv-border)] bg-white text-[var(--cv-fg)]",
-                      )}
-                    >
-                      {m.attachments?.map((a) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          key={a.mediaUrl}
-                          src={a.mediaUrl}
-                          alt=""
-                          className="mb-2 max-h-48 w-full rounded-lg object-cover"
-                        />
-                      ))}
-                      {m.body.trim() ? (
-                        <p className="whitespace-pre-wrap">{m.body}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-              <div ref={bottomRef} />
-            </div>
-
-            {error ? (
-              <div className="border-t border-[var(--cv-border)] bg-[var(--cv-danger-soft)] px-4 py-2 text-sm text-[var(--cv-danger)]">
-                <p role="alert">{error}</p>
-                <button
-                  type="button"
-                  className="mt-1 font-medium underline"
-                  onClick={() => void openChat()}
-                >
-                  Try again
-                </button>
-              </div>
-            ) : null}
-
-            <footer className="border-t border-[var(--cv-border)] bg-white p-3">
-              {pendingPreview ? (
-                <div className="mb-2 flex items-center gap-2">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={pendingPreview}
-                    alt="Selected"
-                    className="h-14 w-14 rounded-lg object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={clearPendingImage}
-                    className="text-xs text-[var(--cv-fg-muted)] underline"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ) : null}
-              <div className="flex gap-2">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  capture="environment"
-                  className="hidden"
-                  onChange={(e) =>
-                    onPickImage(e.target.files?.[0] ?? null)
-                  }
-                />
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={sending || booting}
-                  className="rounded-xl border border-[var(--cv-border)] px-3 py-2.5 text-sm"
-                  aria-label="Attach image"
-                >
-                  📷
-                </button>
-                <label htmlFor="wc-composer" className="sr-only">
-                  Write a message
-                </label>
-                <input
-                  id="wc-composer"
-                  value={composer}
-                  onChange={(e) => setComposer(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void send();
-                    }
-                  }}
-                  placeholder="Write a message…"
-                  disabled={sending || booting}
-                  className="flex-1 rounded-xl border border-[var(--cv-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--cv-accent)] focus:ring-2 focus:ring-[var(--cv-accent-ring)]"
-                />
-                <button
-                  type="button"
-                  onClick={() => void send()}
-                  disabled={
-                    sending ||
-                    booting ||
-                    (!composer.trim() && !pendingImage)
-                  }
-                  className="rounded-xl bg-[var(--cv-accent)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--cv-accent-hover)] disabled:opacity-50"
-                  aria-label="Send message"
-                >
-                  {sending ? "…" : "Send"}
-                </button>
-              </div>
-            </footer>
-          </div>
+          <div className="relative w-full max-w-md sm:w-full">{chatPanel}</div>
         </div>
       ) : null}
     </>
