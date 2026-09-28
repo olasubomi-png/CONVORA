@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 type NotificationItem = {
@@ -44,6 +44,31 @@ function urlBase64ToUint8Array(base64String: string) {
   return out;
 }
 
+/** Short soft blip via Web Audio (no external asset). */
+function playNotificationChime() {
+  try {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.value = 0.04;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+    osc.stop(ctx.currentTime + 0.2);
+    window.setTimeout(() => void ctx.close(), 300);
+  } catch {
+    /* autoplay blocked */
+  }
+}
+
 export function NotificationBell({
   organizationId,
 }: {
@@ -51,47 +76,80 @@ export function NotificationBell({
   membershipId?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeConversationId = searchParams.get("c");
+
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const panelRef = useRef<HTMLDivElement>(null);
   const lastUnread = useRef(0);
+  const knownIds = useRef<Set<string>>(new Set());
+  const primed = useRef(false);
 
   const load = useCallback(async () => {
     if (!organizationId) return;
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(
-        `/api/notifications?organizationId=${encodeURIComponent(organizationId)}`,
-      );
+      const [res, prefsRes] = await Promise.all([
+        fetch(
+          `/api/notifications?organizationId=${encodeURIComponent(organizationId)}`,
+        ),
+        fetch(
+          `/api/notifications/preferences?organizationId=${encodeURIComponent(organizationId)}`,
+        ),
+      ]);
       if (!res.ok) {
         setError("Could not load notifications.");
         return;
       }
+      if (prefsRes.ok) {
+        const prefsJson = await prefsRes.json();
+        setSoundEnabled(prefsJson.preferences?.soundEnabled !== false);
+      }
       const data = await res.json();
+      const nextItems: NotificationItem[] = (data.notifications ?? []).map(
+        (n: NotificationItem & { createdAt: string | Date }) => ({
+          ...n,
+          createdAt:
+            typeof n.createdAt === "string"
+              ? n.createdAt
+              : new Date(n.createdAt).toISOString(),
+        }),
+      );
       const nextUnread = data.unreadCount ?? 0;
+
+      if (primed.current && soundEnabled) {
+        const newUnread = nextItems.filter(
+          (n) =>
+            !n.readAt &&
+            !knownIds.current.has(n.id) &&
+            n.conversationId !== activeConversationId,
+        );
+        if (
+          newUnread.length > 0 &&
+          document.visibilityState === "visible" &&
+          pathname.startsWith("/app")
+        ) {
+          playNotificationChime();
+        }
+      }
+      for (const n of nextItems) knownIds.current.add(n.id);
+      primed.current = true;
       lastUnread.current = nextUnread;
       setUnread(nextUnread);
-      setItems(
-        (data.notifications ?? []).map(
-          (n: NotificationItem & { createdAt: string | Date }) => ({
-            ...n,
-            createdAt:
-              typeof n.createdAt === "string"
-                ? n.createdAt
-                : new Date(n.createdAt).toISOString(),
-          }),
-        ),
-      );
+      setItems(nextItems);
     } catch {
       setError("Could not load notifications.");
     } finally {
       setLoading(false);
     }
-  }, [organizationId]);
+  }, [organizationId, soundEnabled, activeConversationId, pathname]);
 
   useEffect(() => {
     void load();
@@ -110,18 +168,25 @@ export function NotificationBell({
   }, []);
 
   async function markOne(id: string, conversationId: string | null) {
-    await fetch(`/api/notifications/${id}/read`, { method: "POST" }).catch(
-      () => undefined,
-    );
+    const wasUnread = items.find((n) => n.id === id && !n.readAt);
+    const res = await fetch(`/api/notifications/${id}/read`, {
+      method: "POST",
+    }).catch(() => null);
+    if (res?.ok && wasUnread) {
+      setUnread((u) => Math.max(0, u - 1));
+    }
     setItems((prev) =>
       prev.map((n) =>
-        n.id === id ? { ...n, readAt: new Date().toISOString() } : n,
+        n.id === id ? { ...n, readAt: n.readAt ?? new Date().toISOString() } : n,
       ),
     );
-    setUnread((u) => Math.max(0, u - 1));
     setOpen(false);
+    // Reconcile with server
+    void load();
     if (conversationId) {
-      router.push(`/app/inbox?c=${conversationId}`);
+      router.push(
+        `/app/inbox?c=${conversationId}&org=${encodeURIComponent(organizationId)}`,
+      );
     }
   }
 
@@ -138,6 +203,7 @@ export function NotificationBell({
       prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })),
     );
     setUnread(0);
+    void load();
   }
 
   async function enablePush() {

@@ -81,6 +81,8 @@ export function PublicWebChatWidget({
   const [pendingPreview, setPendingPreview] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const reportedSeen = useRef<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -195,31 +197,34 @@ export function PublicWebChatWidget({
     }
   }, [open, token, needsIdentity, loadMessages]);
 
-  // Mark agent messages as seen only when they are visible in the viewport
+  // Mark agent messages as seen when visible inside the chat scroll container
   useEffect(() => {
     if (!open || !token || needsIdentity || messages.length === 0) return;
+    const root = messagesScrollRef.current;
+    if (!root) return;
     const agentMsgs = messages.filter((m) => m.senderType !== "CUSTOMER");
     if (agentMsgs.length === 0) return;
 
     let debounce: number | undefined;
-    const seenIds = new Set<string>();
+    const visible = new Set<string>();
 
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
           const id = (entry.target as HTMLElement).dataset.messageId;
-          if (id) seenIds.add(id);
+          if (!id) continue;
+          if (entry.isIntersecting) visible.add(id);
+          else visible.delete(id);
         }
-        if (seenIds.size === 0) return;
         window.clearTimeout(debounce);
         debounce = window.setTimeout(() => {
-          // Latest visible agent message by order in list
+          // Choose latest agent message that is currently visible and not yet reported
           let upTo: string | null = null;
           for (const m of agentMsgs) {
-            if (seenIds.has(m.id)) upTo = m.id;
+            if (visible.has(m.id)) upTo = m.id;
           }
-          if (!upTo) return;
+          if (!upTo || reportedSeen.current.has(upTo)) return;
+          reportedSeen.current.add(upTo);
           void fetch("/api/web-chat/read", {
             method: "POST",
             headers: {
@@ -228,18 +233,19 @@ export function PublicWebChatWidget({
             },
             body: JSON.stringify({ upToMessageId: upTo }),
           }).catch(() => undefined);
-        }, 500);
+        }, 400);
       },
-      { root: null, threshold: 0.6 },
+      { root, threshold: 0.55, rootMargin: "0px" },
     );
 
-    const nodes = document.querySelectorAll("[data-message-id][data-role='agent']");
+    const nodes = root.querySelectorAll("[data-message-id][data-role='agent']");
     nodes.forEach((n) => observer.observe(n));
     return () => {
       window.clearTimeout(debounce);
       observer.disconnect();
     };
   }, [open, token, needsIdentity, messages]);
+
 
   useEffect(() => {
     scrollBottom();
@@ -451,7 +457,7 @@ export function PublicWebChatWidget({
       </header>
 
       {/* Body */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f7f7f5] px-3 py-4">
+      <div ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f7f7f5] px-3 py-4">
         {booting ? (
           <p className="text-center text-sm text-[var(--cv-fg-muted)]">
             Connecting…

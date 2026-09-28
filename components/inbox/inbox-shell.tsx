@@ -100,7 +100,8 @@ export function InboxShell({
   const [detail, setDetail] = useState<{
     status: string;
     priority: string;
-    customerName: string; // may be 'New visitor' fallback
+    customerName: string;
+    customerAvatarUrl?: string | null;
   } | null>(null);
   const [composer, setComposer] = useState("");
   const [pendingImage, setPendingImage] = useState<File | null>(null);
@@ -166,6 +167,10 @@ export function InboxShell({
         detJson.conversation?.customer?.displayName ??
         detJson.customer?.displayName ??
         "Customer",
+      customerAvatarUrl:
+        detJson.customer?.avatarUrl ??
+        detJson.conversation?.customer?.avatarUrl ??
+        null,
     });
   }, []);
 
@@ -380,8 +385,13 @@ export function InboxShell({
                 >
                   ←
                 </button>
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--cv-accent-soft)] text-xs font-semibold text-[var(--cv-accent)]">
-                  {initials(friendlyCustomerName(detail?.customerName))}
+                <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[var(--cv-accent-soft)] text-xs font-semibold text-[var(--cv-accent)]">
+                  {detail?.customerAvatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={detail.customerAvatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    initials(friendlyCustomerName(detail?.customerName))
+                  )}
                 </span>
                 <div>
                   <h2 className="text-sm font-semibold text-[var(--cv-fg)]">

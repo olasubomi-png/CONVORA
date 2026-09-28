@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 
@@ -44,6 +44,7 @@ const moreNav: NavItem[] = [
   { href: "/app/profile", label: "Agent profile" },
   { href: "/app/organization", label: "Organization" },
   { href: "/app/settings/billing", label: "Billing" },
+  { href: "/app/settings/notifications", label: "Notifications" },
 ];
 
 function NavLink({
@@ -194,7 +195,9 @@ export function AppShell({
             <span className="truncate">Search conversations, customers…</span>
           </div>
           {organizationId ? (
-            <NotificationBell organizationId={organizationId} />
+            <Suspense fallback={null}>
+              <NotificationBell organizationId={organizationId} />
+            </Suspense>
           ) : null}
         </header>
         <main className="flex-1">{children}</main>

@@ -7,6 +7,7 @@ export type NotificationEmailPayload = {
   channel: string;
   preview: string;
   conversationUrl: string;
+  messageCount?: number;
 };
 
 export function isEmailConfigured(): boolean {
@@ -29,11 +30,20 @@ export async function sendNotificationEmail(
     const env = getServerEnv();
     if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return false;
 
-    const subject = `${payload.customerName} messaged you on ${payload.channel}`;
+    const count = payload.messageCount && payload.messageCount > 1 ? payload.messageCount : 1;
+    const subject =
+      count > 1
+        ? `${payload.customerName} sent ${count} messages on ${payload.channel}`
+        : `${payload.customerName} messaged you on ${payload.channel}`;
+    const countLine =
+      count > 1
+        ? `<p style="font-size:13px;color:#5c5c5c;margin:0 0 12px">${count} new messages in this conversation</p>`
+        : "";
     const html = `
       <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;color:#141414">
         <p style="font-size:16px;font-weight:600;margin:0 0 8px">${escapeHtml(payload.customerName)}</p>
         <p style="font-size:14px;color:#5c5c5c;margin:0 0 12px">${escapeHtml(payload.channel)} · CONVORA</p>
+        ${countLine}
         <p style="font-size:15px;line-height:1.5;margin:0 0 20px">${escapeHtml(payload.preview)}</p>
         <a href="${escapeAttr(payload.conversationUrl)}"
            style="display:inline-block;background:#1f4e3d;color:#fff;text-decoration:none;padding:10px 16px;border-radius:10px;font-size:14px;font-weight:600">

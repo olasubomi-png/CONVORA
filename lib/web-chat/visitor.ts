@@ -349,6 +349,7 @@ export async function sendVisitorMessage(
       return message;
     });
     await flushAutomationEvents(visitor.organizationId);
+    // In-app notification rows are written quickly; push/email are async inside notify
     try {
       await notifyAgentsOfCustomerMessage({
         organizationId: visitor.organizationId,

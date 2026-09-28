@@ -13,7 +13,14 @@ import {
   markConversationSeenByVisitor,
   markConversationSeenByAgent,
 } from "@/lib/messaging/receipts";
-import { listNotificationsForUser, markNotificationRead } from "@/lib/notifications/notify";
+import {
+  listNotificationsForUser,
+  markNotificationRead,
+  getNotificationPreferences,
+  updateNotificationPreferences,
+} from "@/lib/notifications/notify";
+import { AuthorizationError } from "@/lib/errors";
+
 import { sendAgentMessage } from "@/lib/conversations/messages";
 import { getTestDb, setupTestEnv, truncateAllTables } from "../helpers/db";
 import { resetRateLimit } from "@/lib/rate-limit";
@@ -202,5 +209,37 @@ describe("agent notifications", () => {
     );
     // Same 2-minute bucket → one notification row updated
     expect(listed.notifications.length).toBe(1);
+  });
+});
+
+
+describe("notification isolation and preferences", () => {
+  it("denies listing notifications for another organization", async () => {
+    const a = await setup();
+    const ownerB = await seedUser(`b-${Date.now()}@example.com`);
+    const orgB = await createOrganizationWithOwner(ownerB.id, {
+      name: "B",
+      slug: `b-${Date.now()}`,
+    });
+    await expect(
+      listNotificationsForUser(a.owner.id, orgB.organizationId),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+  });
+
+  it("updates notification preferences for membership", async () => {
+    const { owner, org } = await setup();
+    const prefs = await updateNotificationPreferences(
+      owner.id,
+      org.organizationId,
+      { soundEnabled: false, emailDigestSeconds: 180 },
+    );
+    expect(prefs?.soundEnabled).toBe(false);
+    expect(prefs?.emailDigestSeconds).toBe(180);
+    const loaded = await getNotificationPreferences(
+      owner.id,
+      org.organizationId,
+    );
+    expect(loaded.soundEnabled).toBe(false);
+    expect(loaded.emailDigestSeconds).toBe(180);
   });
 });
