@@ -19,9 +19,19 @@ export async function POST(request: Request) {
       sessionToken: input.sessionToken,
     });
 
+    const displayName = result.visitor.displayName?.trim() || null;
+    const needsIdentity = !displayName;
+
     const response = NextResponse.json(
       {
         sessionToken: result.sessionToken,
+        needsIdentity,
+        identity: displayName
+          ? {
+              displayName,
+              email: result.visitor.email,
+            }
+          : null,
         config: {
           displayName: result.config.displayName ?? result.installation.name,
           welcomeMessage:
@@ -35,7 +45,6 @@ export async function POST(request: Request) {
       { status: 200 },
     );
 
-    // Cookie enables <img> loads of private chat media without custom headers.
     response.cookies.set("convora_wc_token", result.sessionToken, {
       httpOnly: true,
       sameSite: "lax",

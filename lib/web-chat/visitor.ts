@@ -181,7 +181,7 @@ export async function ensureVisitorConversation(visitorId: string) {
         .insert(customers)
         .values({
           organizationId: visitor.organizationId,
-          displayName: visitor.displayName?.trim() || "Website visitor",
+          displayName: visitor.displayName?.trim() || "New visitor",
           email: visitor.email ? visitor.email.trim().toLowerCase() : null,
         })
         .returning();
@@ -458,4 +458,189 @@ export async function listVisitorMessages(
       attachments: attachmentMap[m.id] ?? [],
     })),
   };
+}
+
+/**
+ * Persist visitor identity from the authenticated session token.
+ * Never accepts client-supplied customerId.
+ */
+export async function setVisitorIdentity(
+  sessionToken: string,
+  input: { displayName: string; email?: string | null },
+) {
+  const name = input.displayName.trim().replace(/\s+/g, " ");
+  if (name.length < 2) {
+    throw new ValidationError("Please enter your name (at least 2 characters).");
+  }
+  if (name.length > 120) {
+    throw new ValidationError("Name is too long.");
+  }
+
+  let email: string | null = null;
+  if (input.email != null && String(input.email).trim() !== "") {
+    email = String(input.email).trim().toLowerCase();
+    if (email.length > 254) {
+      throw new ValidationError("Email is too long.");
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new ValidationError("Please enter a valid email address.");
+    }
+  }
+
+  const { visitor } = await requireVisitorSession(sessionToken);
+  const db = getDatabase();
+
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT id FROM web_chat_visitors WHERE id = ${visitor.id} FOR UPDATE`,
+    );
+
+    const [locked] = await tx
+      .select()
+      .from(webChatVisitors)
+      .where(eq(webChatVisitors.id, visitor.id))
+      .limit(1);
+    if (!locked) throw new NotFoundError("Visitor session not found.");
+
+    await tx
+      .update(webChatVisitors)
+      .set({
+        displayName: name,
+        email: email ?? locked.email,
+        lastSeenAt: new Date(),
+        expiresAt: sessionExpiresAt(),
+      })
+      .where(eq(webChatVisitors.id, locked.id));
+
+    let customerId = locked.customerId;
+
+    if (customerId) {
+      const patch: {
+        displayName: string;
+        email?: string | null;
+        updatedAt: Date;
+      } = {
+        displayName: name,
+        updatedAt: new Date(),
+      };
+      if (email) patch.email = email;
+      try {
+        await tx
+          .update(customers)
+          .set(patch)
+          .where(
+            and(
+              eq(customers.id, customerId),
+              eq(customers.organizationId, locked.organizationId),
+            ),
+          );
+      } catch (err) {
+        if (email && isUniqueViolation(err)) {
+          // Keep name; leave email unchanged on customer if conflict
+          await tx
+            .update(customers)
+            .set({ displayName: name, updatedAt: new Date() })
+            .where(
+              and(
+                eq(customers.id, customerId),
+                eq(customers.organizationId, locked.organizationId),
+              ),
+            );
+        } else {
+          throw err;
+        }
+      }
+    } else {
+      // Prefer linking to existing org customer with same email
+      if (email) {
+        const [existing] = await tx
+          .select()
+          .from(customers)
+          .where(
+            and(
+              eq(customers.organizationId, locked.organizationId),
+              eq(customers.email, email),
+              eq(customers.status, "ACTIVE"),
+            ),
+          )
+          .limit(1);
+        if (existing) {
+          customerId = existing.id;
+          await tx
+            .update(customers)
+            .set({ displayName: name, updatedAt: new Date() })
+            .where(eq(customers.id, existing.id));
+        }
+      }
+
+      if (!customerId) {
+        try {
+          const [created] = await tx
+            .insert(customers)
+            .values({
+              organizationId: locked.organizationId,
+              displayName: name,
+              email,
+            })
+            .returning();
+          if (!created) throw new Error("Failed to create customer");
+          customerId = created.id;
+        } catch (err) {
+          if (email && isUniqueViolation(err)) {
+            const [existing] = await tx
+              .select()
+              .from(customers)
+              .where(
+                and(
+                  eq(customers.organizationId, locked.organizationId),
+                  eq(customers.email, email),
+                  eq(customers.status, "ACTIVE"),
+                ),
+              )
+              .limit(1);
+            if (existing) {
+              customerId = existing.id;
+              await tx
+                .update(customers)
+                .set({ displayName: name, updatedAt: new Date() })
+                .where(eq(customers.id, existing.id));
+            } else {
+              const [created] = await tx
+                .insert(customers)
+                .values({
+                  organizationId: locked.organizationId,
+                  displayName: name,
+                  email: null,
+                })
+                .returning();
+              if (!created) throw new Error("Failed to create customer");
+              customerId = created.id;
+            }
+          } else {
+            throw err;
+          }
+        }
+      }
+
+      await tx
+        .update(webChatVisitors)
+        .set({ customerId })
+        .where(eq(webChatVisitors.id, locked.id));
+    }
+
+    return {
+      displayName: name,
+      email: email ?? locked.email,
+      customerId: customerId!,
+      visitorId: locked.id,
+    };
+  }).then(async (result) => {
+    const ensured = await ensureVisitorConversation(result.visitorId);
+    return {
+      displayName: result.displayName,
+      email: result.email,
+      customerId: ensured.customerId,
+      conversationId: ensured.conversationId,
+    };
+  });
 }
