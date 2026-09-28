@@ -6,25 +6,26 @@ import {
   readS3ConfigFromEnv,
 } from "@/lib/storage/s3-backend";
 import { ConfigurationError } from "@/lib/errors";
+import { createVercelBlobObjectStorage } from "@/lib/storage/vercel-blob-backend";
 
-export type StorageBackendName = "local" | "s3";
+export type StorageBackendName = "local" | "s3" | "vercel_blob";
 
 /**
  * Resolve object storage backend.
  *
  * - development/test default: local
- * - production default: s3 (must be configured)
- * - explicit MEDIA_STORAGE_BACKEND=local|s3 overrides
+ * - production default: vercel_blob (must be configured)
+ * - explicit MEDIA_STORAGE_BACKEND=local|s3|vercel_blob overrides
  *
- * Never silently falls back from s3 to local.
+ * Never silently falls back from a configured production backend to local.
  */
 export function resolveStorageBackendName(): StorageBackendName {
   const explicit = process.env.MEDIA_STORAGE_BACKEND?.trim().toLowerCase();
-  if (explicit === "local" || explicit === "s3") {
+  if (explicit === "local" || explicit === "s3" || explicit === "vercel_blob") {
     return explicit;
   }
   if (process.env.NODE_ENV === "production") {
-    return "s3";
+    return "vercel_blob";
   }
   return "local";
 }
@@ -36,6 +37,11 @@ export function resolveObjectStorage(): ObjectStorage {
   const name = resolveStorageBackendName();
   if (name === "s3") {
     cached = createS3ObjectStorage(readS3ConfigFromEnv());
+    return cached;
+  }
+
+  if (name === "vercel_blob") {
+    cached = createVercelBlobObjectStorage();
     return cached;
   }
   if (process.env.NODE_ENV === "production" && name !== "local") {

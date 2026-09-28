@@ -8,7 +8,7 @@ export type StoredObject = {
 };
 
 export type ObjectStorage = {
-  readonly name: "local" | "s3";
+  readonly name: "local" | "s3" | "vercel_blob";
   put(input: {
     storageKey: string;
     bytes: Buffer;
