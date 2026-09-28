@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { VerifiedCheck } from "@/components/profiles/verification-badge";
 
 type Attachment = { id: string; mediaUrl: string; mimeType: string };
 
@@ -362,11 +363,7 @@ export function PublicWebChatWidget({
               <span className="truncate text-sm font-semibold text-[var(--cv-fg)]">
                 {displayName}
               </span>
-              {verified ? (
-                <span className="text-[10px] font-medium text-[var(--cv-accent)]">
-                  ✓
-                </span>
-              ) : null}
+              {verified ? <VerifiedCheck size={15} /> : null}
             </span>
             <span className="block truncate text-xs text-[var(--cv-fg-muted)]">
               Usually replies during business hours
@@ -609,7 +606,10 @@ export function PublicWebChatWidget({
               )}
             </span>
             <div>
-              <p className="text-lg font-semibold">{displayName}</p>
+              <p className="flex items-center justify-center gap-1.5 text-lg font-semibold">
+                <span>{displayName}</span>
+                {verified ? <VerifiedCheck size={18} /> : null}
+              </p>
               <p className="text-sm text-[var(--cv-fg-muted)]">
                 Usually replies during business hours
               </p>

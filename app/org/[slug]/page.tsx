@@ -13,29 +13,53 @@ type Props = {
   searchParams: Promise<{ chat?: string }>;
 };
 
+function absolutizeMediaUrl(appUrl: string, pathOrUrl: string | null | undefined): string | null {
+  if (!pathOrUrl) return null;
+  if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) {
+    return pathOrUrl;
+  }
+  const base = appUrl.replace(/\/$/, "");
+  const path = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+  return `${base}${path}`;
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const profile = await getPublicOrganizationProfileBySlug(slug);
   if (!profile) return { title: "Organization — CONVORA" };
   const env = getServerEnv();
-  const url = `${env.APP_URL}/org/${profile.slug}`;
+  const url = `${env.APP_URL.replace(/\/$/, "")}/org/${profile.slug}`;
   const description =
-    profile.description ??
+    profile.description?.trim() ||
     `${profile.displayName} on CONVORA — message them where you already are.`;
+  const imageUrl = absolutizeMediaUrl(env.APP_URL, profile.logoUrl);
+
   return {
     title: `${profile.displayName} — CONVORA`,
     description,
     openGraph: {
-      title: profile.displayName,
+      title: `${profile.displayName} — CONVORA`,
       description,
       url,
       type: "profile",
-      ...(profile.logoUrl ? { images: [{ url: profile.logoUrl }] } : {}),
+      ...(imageUrl
+        ? {
+            images: [
+              {
+                url: imageUrl,
+                width: 1200,
+                height: 630,
+                alt: `${profile.displayName} profile photo`,
+              },
+            ],
+          }
+        : {}),
     },
     twitter: {
-      card: "summary",
-      title: profile.displayName,
+      card: imageUrl ? "summary_large_image" : "summary",
+      title: `${profile.displayName} — CONVORA`,
       description,
+      ...(imageUrl ? { images: [imageUrl] } : {}),
     },
   };
 }
@@ -101,7 +125,7 @@ export default async function PublicOrgPage({ params, searchParams }: Props) {
       </header>
 
       <main>
-        {chatAvailable && (chatPrimary || true) ? (
+        {chatAvailable ? (
           <section className="border-b border-[var(--cv-border)] bg-[var(--cv-bg)] py-4 sm:py-8">
             <Container className="max-w-xl">
               {!chatPrimary ? (
@@ -111,7 +135,7 @@ export default async function PublicOrgPage({ params, searchParams }: Props) {
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={profile.logoUrl}
-                        alt=""
+                        alt={`${profile.displayName} profile photo`}
                         className="h-full w-full object-cover"
                       />
                     ) : (
@@ -119,7 +143,7 @@ export default async function PublicOrgPage({ params, searchParams }: Props) {
                     )}
                   </span>
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <h1 className="truncate text-lg font-semibold tracking-tight">
                         {profile.displayName}
                       </h1>
@@ -139,7 +163,7 @@ export default async function PublicOrgPage({ params, searchParams }: Props) {
                 profileHref={`/org/${profile.slug}#about`}
                 verified={profile.verificationStatus === "VERIFIED"}
                 autoOpen={chatPrimary}
-                variant={chatPrimary ? "full" : "full"}
+                variant="full"
               />
             </Container>
           </section>
@@ -159,7 +183,7 @@ export default async function PublicOrgPage({ params, searchParams }: Props) {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={profile.logoUrl}
-                    alt=""
+                    alt={`${profile.displayName} profile photo`}
                     className="h-full w-full object-cover"
                   />
                 ) : (
@@ -167,11 +191,14 @@ export default async function PublicOrgPage({ params, searchParams }: Props) {
                 )}
               </span>
               <div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <h3 className="text-xl font-semibold tracking-tight">
                     {profile.displayName}
                   </h3>
-                  <VerificationBadge status={profile.verificationStatus} />
+                  <VerificationBadge
+                    status={profile.verificationStatus}
+                    size={18}
+                  />
                 </div>
                 {profile.description ? (
                   <p className="mt-2 text-sm leading-6 text-[var(--cv-fg-secondary)]">
