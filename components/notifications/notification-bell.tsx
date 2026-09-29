@@ -44,15 +44,43 @@ function urlBase64ToUint8Array(base64String: string) {
   return out;
 }
 
-/** Short soft blip via Web Audio (no external asset). */
-function playNotificationChime() {
+/** Shared AudioContext — resume after a user gesture to satisfy autoplay policy. */
+let sharedAudioCtx: AudioContext | null = null;
+
+function ensureAudioContext(): AudioContext | null {
   try {
     const Ctx =
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext })
         .webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
+    if (!Ctx) return null;
+    if (!sharedAudioCtx || sharedAudioCtx.state === "closed") {
+      sharedAudioCtx = new Ctx();
+    }
+    if (sharedAudioCtx.state === "suspended") {
+      void sharedAudioCtx.resume().catch(() => undefined);
+    }
+    return sharedAudioCtx;
+  } catch {
+    return null;
+  }
+}
+
+if (typeof window !== "undefined") {
+  const unlock = () => {
+    ensureAudioContext();
+    window.removeEventListener("pointerdown", unlock);
+    window.removeEventListener("keydown", unlock);
+  };
+  window.addEventListener("pointerdown", unlock, { once: true });
+  window.addEventListener("keydown", unlock, { once: true });
+}
+
+/** Short soft blip via Web Audio (no external asset). */
+function playNotificationChime() {
+  try {
+    const ctx = ensureAudioContext();
+    if (!ctx || ctx.state !== "running") return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = "sine";
@@ -63,9 +91,8 @@ function playNotificationChime() {
     osc.start();
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
     osc.stop(ctx.currentTime + 0.2);
-    window.setTimeout(() => void ctx.close(), 300);
   } catch {
-    /* autoplay blocked */
+    /* autoplay blocked or unavailable */
   }
 }
 

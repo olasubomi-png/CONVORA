@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { users, messages, customers } from "@/db/schema";
 import { hashPassword } from "@/lib/auth/password";
 import { createOrganizationWithOwner } from "@/lib/orgs/create";
@@ -20,6 +20,8 @@ import {
   updateNotificationPreferences,
 } from "@/lib/notifications/notify";
 import { AuthorizationError } from "@/lib/errors";
+import { notificationDeliveries } from "@/db/schema";
+
 
 import { sendAgentMessage } from "@/lib/conversations/messages";
 import { getTestDb, setupTestEnv, truncateAllTables } from "../helpers/db";
@@ -241,5 +243,73 @@ describe("notification isolation and preferences", () => {
     );
     expect(loaded.soundEnabled).toBe(false);
     expect(loaded.emailDigestSeconds).toBe(180);
+  });
+});
+
+
+describe("notification delivery outbox", () => {
+  it("queues independent push and email deliveries", async () => {
+    const { owner, org, installation } = await setup();
+    await updateNotificationPreferences(owner.id, org.organizationId, {
+      pushEnabled: true,
+      emailEnabled: true,
+      emailDigestSeconds: 120,
+    });
+    const session = await createOrResumeVisitorSession({
+      publicKey: installation.publicKey,
+      origin: null,
+    });
+    await setVisitorIdentity(session.sessionToken, {
+      displayName: "Deliver",
+    });
+    await sendVisitorMessage(session.sessionToken, "hello delivery");
+
+    const jobs = await getTestDb()
+      .select()
+      .from(notificationDeliveries)
+      .where(eq(notificationDeliveries.organizationId, org.organizationId));
+
+    const channels = jobs.map((j) => j.channel).sort();
+    expect(channels).toContain("PUSH");
+    expect(channels).toContain("EMAIL");
+
+    const push = jobs.find((j) => j.channel === "PUSH");
+    const email = jobs.find((j) => j.channel === "EMAIL");
+    expect(push?.status === "SENT" || push?.status === "PENDING" || push?.status === "FAILED").toBe(true);
+    // Email is delayed by availableAt
+    expect(email?.status).toBe("PENDING");
+    expect(email?.availableAt.getTime()).toBeGreaterThan(Date.now() - 1000);
+  });
+
+  it("merges rapid email deliveries into one pending job", async () => {
+    const { owner, org, installation } = await setup();
+    await updateNotificationPreferences(owner.id, org.organizationId, {
+      emailEnabled: true,
+      emailDigestSeconds: 300,
+    });
+    const session = await createOrResumeVisitorSession({
+      publicKey: installation.publicKey,
+      origin: null,
+    });
+    await setVisitorIdentity(session.sessionToken, {
+      displayName: "Batch",
+    });
+    await sendVisitorMessage(session.sessionToken, "one");
+    await sendVisitorMessage(session.sessionToken, "two");
+    await sendVisitorMessage(session.sessionToken, "three");
+
+    const emailJobs = await getTestDb()
+      .select()
+      .from(notificationDeliveries)
+      .where(
+        and(
+          eq(notificationDeliveries.organizationId, org.organizationId),
+          eq(notificationDeliveries.channel, "EMAIL"),
+        ),
+      );
+    expect(emailJobs.length).toBe(1);
+    const count = (emailJobs[0]?.payload as { messageCount?: number })
+      ?.messageCount;
+    expect((count ?? 0) >= 2).toBe(true);
   });
 });

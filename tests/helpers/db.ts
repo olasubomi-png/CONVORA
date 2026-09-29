@@ -85,6 +85,7 @@ export async function truncateAllTables(): Promise<void> {
       conversation_tags,
       conversation_assignments,
       conversation_notes,
+      notification_deliveries,
       agent_notifications,
       notification_preferences,
       push_subscriptions,

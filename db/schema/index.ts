@@ -247,3 +247,13 @@ export type {
   NotificationPreference,
   PushSubscription,
 } from "./notifications";
+
+export {
+  notificationDeliveries,
+  notificationDeliveryChannelEnum,
+  notificationDeliveryStatusEnum,
+} from "./notification-deliveries";
+export type {
+  NotificationDelivery,
+  NotificationDeliveryPayload,
+} from "./notification-deliveries";

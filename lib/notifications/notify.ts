@@ -9,10 +9,12 @@ import {
   organizations,
 } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/db-errors";
-import { sendPushToUser } from "@/lib/notifications/push";
-import { sendNotificationEmail } from "@/lib/notifications/email";
 import { getServerEnv } from "@/lib/env";
 import { AuthorizationError } from "@/lib/errors";
+import {
+  enqueueNotificationDelivery,
+  processNotificationDeliveries,
+} from "@/lib/notifications/delivery";
 
 export type NotifyNewMessageInput = {
   organizationId: string;
@@ -24,32 +26,15 @@ export type NotifyNewMessageInput = {
   excludeMembershipId?: string | null;
 };
 
-type PendingDelivery = {
-  notificationId: string;
-  userId: string;
-  membershipId: string;
-  email: string | null;
-  pushEnabled: boolean;
-  emailEnabled: boolean;
-  digestSeconds: number;
-  isNewInApp: boolean;
-  customerName: string;
-  organizationName?: string;
-  channel: string;
-  preview: string;
-  conversationId: string;
-  organizationId: string;
-  messageId: string;
-};
-
 /**
- * Fast path: create/update in-app notification rows only.
- * External channels (push/email) are scheduled asynchronously and never block the caller.
+ * Create in-app notifications and enqueue durable PUSH/EMAIL delivery jobs.
+ * Does not call external providers on the request path.
+ * Call processNotificationDeliveries() after commit (via flush) to process due jobs.
  *
- * Dedup policies (independent per channel):
- * - in-app: unique (membershipId, dedupeKey) where dedupeKey = msg:conversationId:2minBucket
- * - push: once per new in-app row (push_sent_at null → send)
- * - email: at most once per membership+conversation within emailDigestSeconds
+ * Channel policies (independent):
+ * - in-app: unique (membershipId, dedupeKey) 2-minute conversation bucket
+ * - push: dedupeKey push:conversationId:2minBucket — immediate availableAt
+ * - email: dedupeKey email:conversationId:digestBucket — availableAt delayed by emailDigestSeconds
  */
 export async function notifyAgentsOfCustomerMessage(
   input: NotifyNewMessageInput,
@@ -90,10 +75,17 @@ export async function notifyAgentsOfCustomerMessage(
 
   const preview = input.preview.trim().slice(0, 140) || "New message";
   const bucket = Math.floor(Date.now() / 120_000);
-  const dedupeKey = `msg:${input.conversationId}:${bucket}`;
+  const inAppDedupeKey = `msg:${input.conversationId}:${bucket}`;
+
+  let appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  try {
+    appUrl = getServerEnv().APP_URL;
+  } catch {
+    /* fallback */
+  }
+  const conversationUrl = `${appUrl}/app/inbox?c=${input.conversationId}&org=${input.organizationId}`;
 
   let created = 0;
-  const pending: PendingDelivery[] = [];
 
   for (const m of members) {
     if (
@@ -134,7 +126,7 @@ export async function notifyAgentsOfCustomerMessage(
             messageId: input.messageId,
             customerId: input.customerId,
             channel: input.channel,
-            dedupeKey,
+            dedupeKey: inAppDedupeKey,
           })
           .returning();
         notificationId = row?.id ?? null;
@@ -152,7 +144,7 @@ export async function notifyAgentsOfCustomerMessage(
             .where(
               and(
                 eq(agentNotifications.membershipId, m.membershipId),
-                eq(agentNotifications.dedupeKey, dedupeKey),
+                eq(agentNotifications.dedupeKey, inAppDedupeKey),
               ),
             )
             .returning();
@@ -162,185 +154,66 @@ export async function notifyAgentsOfCustomerMessage(
           throw err;
         }
       }
-    } else {
-      // Still create a lightweight row for delivery tracking when only push/email
-      try {
-        const [row] = await db
-          .insert(agentNotifications)
-          .values({
-            organizationId: input.organizationId,
-            membershipId: m.membershipId,
-            userId: m.userId,
-            type: "conversation.message_received",
-            title: customer.displayName,
-            body: preview,
-            conversationId: input.conversationId,
-            messageId: input.messageId,
-            customerId: input.customerId,
-            channel: input.channel,
-            dedupeKey: `${dedupeKey}:ext`,
-            readAt: new Date(), // not shown in-app
-          })
-          .returning();
-        notificationId = row?.id ?? null;
-        isNewInApp = true;
-      } catch (err) {
-        if (isUniqueViolation(err)) {
-          const [existing] = await db
-            .select()
-            .from(agentNotifications)
-            .where(
-              and(
-                eq(agentNotifications.membershipId, m.membershipId),
-                eq(agentNotifications.dedupeKey, `${dedupeKey}:ext`),
-              ),
-            )
-            .limit(1);
-          notificationId = existing?.id ?? null;
-          isNewInApp = false;
-        } else {
-          throw err;
-        }
-      }
     }
 
-    if (notificationId) {
-      pending.push({
-        notificationId,
-        userId: m.userId,
-        membershipId: m.membershipId,
-        email: m.email,
-        pushEnabled,
-        emailEnabled,
-        digestSeconds,
-        isNewInApp,
-        customerName: customer.displayName,
-        organizationName: org?.name,
-        channel: input.channel,
-        preview,
-        conversationId: input.conversationId,
+    const basePayload = {
+      customerName: customer.displayName,
+      organizationName: org?.name,
+      channelLabel: input.channel,
+      preview,
+      conversationUrl,
+      messageCount: 1,
+      messageId: input.messageId,
+    };
+
+    // PUSH — independent dedupe; only queue on new in-app or when in-app off
+    if (pushEnabled && (isNewInApp || !inAppEnabled)) {
+      await enqueueNotificationDelivery({
         organizationId: input.organizationId,
-        messageId: input.messageId,
+        membershipId: m.membershipId,
+        userId: m.userId,
+        notificationId,
+        conversationId: input.conversationId,
+        customerId: input.customerId,
+        channel: "PUSH",
+        dedupeKey: `push:${input.conversationId}:${bucket}`,
+        payload: basePayload,
+        availableAt: new Date(),
       });
     }
-  }
 
-  // Never await external providers on the request path
-  if (pending.length > 0) {
-    void deliverExternalChannels(pending).catch(() => undefined);
+    // EMAIL — delayed cooldown window (emailDigestSeconds). Same dedupe key merges
+    // subsequent messages into one PENDING job until availableAt.
+    if (emailEnabled && m.email) {
+      const emailBucket = Math.floor(Date.now() / (digestSeconds * 1000));
+      const emailDedupe = `email:${input.conversationId}:${emailBucket}`;
+      const availableAt = new Date(Date.now() + digestSeconds * 1000);
+      await enqueueNotificationDelivery({
+        organizationId: input.organizationId,
+        membershipId: m.membershipId,
+        userId: m.userId,
+        notificationId,
+        conversationId: input.conversationId,
+        customerId: input.customerId,
+        channel: "EMAIL",
+        dedupeKey: emailDedupe,
+        payload: basePayload,
+        availableAt,
+      });
+    }
   }
 
   return { created };
 }
 
 /**
- * Deliver push + email for notification rows. Safe to call multiple times
- * (uses push_sent_at / email_sent_at as idempotency markers).
+ * Process due notification delivery jobs for an organization.
+ * Intended to run after domain mutations (alongside automation flush).
  */
-export async function deliverExternalChannels(
-  items: PendingDelivery[],
+export async function flushNotificationDeliveries(
+  organizationId: string,
 ): Promise<void> {
-  const db = getDatabase();
-  let appUrl = process.env.APP_URL ?? "http://localhost:3000";
-  try {
-    appUrl = getServerEnv().APP_URL;
-  } catch {
-    /* use fallback */
-  }
-
-  for (const item of items) {
-    const conversationUrl = `${appUrl}/app/inbox?c=${item.conversationId}&org=${item.organizationId}`;
-
-    // Push: only when enabled and not yet sent for this notification row
-    if (item.pushEnabled) {
-      try {
-        const [row] = await db
-          .select({
-            pushSentAt: agentNotifications.pushSentAt,
-          })
-          .from(agentNotifications)
-          .where(eq(agentNotifications.id, item.notificationId))
-          .limit(1);
-        if (row && !row.pushSentAt && item.isNewInApp) {
-          await sendPushToUser(item.userId, {
-            title: item.customerName,
-            body: item.preview,
-            conversationId: item.conversationId,
-            organizationId: item.organizationId,
-            url: conversationUrl,
-          });
-          await db
-            .update(agentNotifications)
-            .set({ pushSentAt: new Date() })
-            .where(
-              and(
-                eq(agentNotifications.id, item.notificationId),
-                sql`${agentNotifications.pushSentAt} IS NULL`,
-              ),
-            );
-        }
-      } catch {
-        /* push failures never fail messaging */
-      }
-    }
-
-    // Email digest: one email per membership+conversation per digest window
-    if (item.emailEnabled && item.email) {
-      try {
-        const since = new Date(Date.now() - item.digestSeconds * 1000);
-        const [recentEmail] = await db
-          .select({ id: agentNotifications.id })
-          .from(agentNotifications)
-          .where(
-            and(
-              eq(agentNotifications.membershipId, item.membershipId),
-              eq(agentNotifications.conversationId, item.conversationId),
-              sql`${agentNotifications.emailSentAt} IS NOT NULL`,
-              sql`${agentNotifications.emailSentAt} > ${since}`,
-            ),
-          )
-          .limit(1);
-
-        if (!recentEmail) {
-          // Count recent messages in this conversation for digest body
-          const [countRow] = await db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(agentNotifications)
-            .where(
-              and(
-                eq(agentNotifications.membershipId, item.membershipId),
-                eq(agentNotifications.conversationId, item.conversationId),
-                sql`${agentNotifications.createdAt} > ${since}`,
-              ),
-            );
-          const grouped = Math.max(1, countRow?.count ?? 1);
-
-          const ok = await sendNotificationEmail({
-            to: item.email,
-            customerName: item.customerName,
-            organizationName: item.organizationName,
-            channel: item.channel,
-            preview: item.preview,
-            conversationUrl,
-            messageCount: grouped,
-          });
-          if (ok) {
-            await db
-              .update(agentNotifications)
-              .set({ emailSentAt: new Date() })
-              .where(
-                and(
-                  eq(agentNotifications.id, item.notificationId),
-                  sql`${agentNotifications.emailSentAt} IS NULL`,
-                ),
-              );
-          }
-        }
-      } catch {
-        /* email failures never fail messaging */
-      }
-    }
-  }
+  await processNotificationDeliveries({ organizationId, limit: 50 });
 }
 
 export async function listNotificationsForUser(
@@ -387,7 +260,6 @@ export async function listNotificationsForUser(
       and(
         eq(agentNotifications.membershipId, m.id),
         eq(agentNotifications.organizationId, organizationId),
-        sql`${agentNotifications.dedupeKey} NOT LIKE '%:ext'`,
       ),
     )
     .orderBy(sql`${agentNotifications.createdAt} DESC`)
@@ -401,7 +273,6 @@ export async function listNotificationsForUser(
         eq(agentNotifications.membershipId, m.id),
         eq(agentNotifications.organizationId, organizationId),
         sql`${agentNotifications.readAt} IS NULL`,
-        sql`${agentNotifications.dedupeKey} NOT LIKE '%:ext'`,
       ),
     );
 
@@ -505,6 +376,7 @@ export async function getNotificationPreferences(
     emailEnabled: prefs?.emailEnabled ?? true,
     pushEnabled: prefs?.pushEnabled ?? true,
     soundEnabled: prefs?.soundEnabled ?? true,
+    /** Cooldown before another email for the same conversation (seconds). */
     emailDigestSeconds: prefs?.emailDigestSeconds ?? 120,
   };
 }

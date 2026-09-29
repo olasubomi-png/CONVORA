@@ -111,11 +111,12 @@ export function NotificationPreferencesPanel({
       ))}
       <label className="block text-sm">
         <span className="mb-1 block text-[var(--cv-fg-secondary)]">
-          Email digest window (seconds)
+          Email cooldown (seconds)
         </span>
         <p className="mb-2 text-xs text-[var(--cv-fg-muted)]">
-          Rapid messages in the same conversation share one email during this
-          window (30–3600).
+          After the first alert, additional messages in the same conversation
+          are batched into one email sent after this delay (30–3600). Not an
+          immediate per-message email.
         </p>
         <input
           type="number"
