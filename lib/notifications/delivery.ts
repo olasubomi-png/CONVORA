@@ -9,6 +9,13 @@ import { isUniqueViolation } from "@/lib/db-errors";
 
 const MAX_ATTEMPTS = 5;
 
+/** Exponential-ish backoff after a failed attempt (seconds). */
+function backoffSeconds(attemptCount: number): number {
+  const table = [0, 30, 120, 600, 1800];
+  return table[Math.min(attemptCount, table.length - 1)] ?? 1800;
+}
+
+
 const claimedIdSchema = z.object({ id: z.string().uuid() });
 
 function parseClaimedIds(result: unknown): string[] {
@@ -38,7 +45,7 @@ export type EnqueueDeliveryInput = {
   notificationId: string | null;
   conversationId: string | null;
   customerId: string | null;
-  channel: "PUSH" | "EMAIL";
+  channel: "PUSH" | "EMAIL" | "WHATSAPP";
   dedupeKey: string;
   payload: NotificationDeliveryPayload;
   /** When the job becomes eligible (email cooldown/digest delay). */
@@ -205,6 +212,33 @@ export async function processNotificationDeliveries(options?: {
         if (!ok) {
           throw new Error("Email provider rejected or is not configured");
         }
+      } else if (row.channel === "WHATSAPP") {
+        const { sendWhatsAppNotification } = await import(
+          "@/lib/notifications/whatsapp"
+        );
+        const to = payload.toPhoneE164;
+        if (!to) {
+          await db
+            .update(notificationDeliveries)
+            .set({
+              status: "CANCELLED",
+              lastError: "Missing recipient phone",
+              updatedAt: new Date(),
+            })
+            .where(eq(notificationDeliveries.id, id));
+          continue;
+        }
+        await sendWhatsAppNotification({
+          to,
+          customerName: payload.customerName ?? "Customer",
+          organizationName: payload.organizationName,
+          channelLabel: payload.channelLabel ?? "WEB",
+          preview: payload.preview ?? "New message",
+          conversationUrl:
+            payload.conversationUrl ??
+            `${process.env.APP_URL ?? ""}/app/inbox`,
+          messageCount: payload.messageCount ?? 1,
+        });
       }
 
       await db
@@ -221,11 +255,15 @@ export async function processNotificationDeliveries(options?: {
       const reason =
         error instanceof Error ? error.message.slice(0, 300) : "failed";
       const failPermanent = row.attemptCount >= MAX_ATTEMPTS;
+      const nextAt = new Date(
+        Date.now() + backoffSeconds(row.attemptCount) * 1000,
+      );
       await db
         .update(notificationDeliveries)
         .set({
           status: failPermanent ? "FAILED" : "PENDING",
           lastError: reason,
+          availableAt: failPermanent ? row.availableAt : nextAt,
           updatedAt: new Date(),
         })
         .where(eq(notificationDeliveries.id, id));

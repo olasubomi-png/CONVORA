@@ -29,10 +29,7 @@ import {
   enqueueAutomationEvent,
   flushAutomationEvents,
 } from "@/lib/automation/dispatch";
-import {
-  notifyAgentsOfCustomerMessage,
-  flushNotificationDeliveries,
-} from "@/lib/notifications/notify";
+import { notifyAgentsOfCustomerMessage } from "@/lib/notifications/notify";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -354,6 +351,7 @@ export async function sendVisitorMessage(
     await flushAutomationEvents(visitor.organizationId);
     // In-app notification rows are written quickly; push/email are async inside notify
     try {
+      // Persist in-app + durable delivery jobs only — worker processes providers
       await notifyAgentsOfCustomerMessage({
         organizationId: visitor.organizationId,
         conversationId,
@@ -362,8 +360,6 @@ export async function sendVisitorMessage(
         channel: "WEB",
         preview: messageBody,
       });
-      // Process due push jobs; delayed email jobs wait until availableAt
-      await flushNotificationDeliveries(visitor.organizationId);
     } catch {
       // Notification failures must not fail message delivery
     }

@@ -16,6 +16,9 @@ const patchSchema = z.object({
   soundEnabled: z.boolean().optional(),
   /** Cooldown window in seconds before another email for the same conversation (30–3600). */
   emailDigestSeconds: z.number().int().min(30).max(3600).optional(),
+  whatsappEnabled: z.boolean().optional(),
+  whatsappPhoneE164: z.string().max(20).nullable().optional(),
+  whatsappDigestSeconds: z.number().int().min(30).max(3600).optional(),
 });
 
 export async function GET(request: Request) {

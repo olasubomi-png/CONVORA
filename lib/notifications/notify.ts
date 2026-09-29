@@ -201,6 +201,31 @@ export async function notifyAgentsOfCustomerMessage(
         availableAt,
       });
     }
+
+    // WHATSAPP — independent cooldown; recipient from preference (no secrets in payload)
+    const whatsappEnabled = prefs?.whatsappEnabled === true;
+    const whatsappPhone = prefs?.whatsappPhoneE164?.trim() || null;
+    const whatsappDigest = prefs?.whatsappDigestSeconds ?? 120;
+    if (whatsappEnabled && whatsappPhone) {
+      const waBucket = Math.floor(Date.now() / (whatsappDigest * 1000));
+      const waDedupe = `whatsapp:${input.conversationId}:${waBucket}`;
+      const waAvailableAt = new Date(Date.now() + whatsappDigest * 1000);
+      await enqueueNotificationDelivery({
+        organizationId: input.organizationId,
+        membershipId: m.membershipId,
+        userId: m.userId,
+        notificationId,
+        conversationId: input.conversationId,
+        customerId: input.customerId,
+        channel: "WHATSAPP",
+        dedupeKey: waDedupe,
+        payload: {
+          ...basePayload,
+          toPhoneE164: whatsappPhone,
+        },
+        availableAt: waAvailableAt,
+      });
+    }
   }
 
   return { created };
@@ -378,6 +403,9 @@ export async function getNotificationPreferences(
     soundEnabled: prefs?.soundEnabled ?? true,
     /** Cooldown before another email for the same conversation (seconds). */
     emailDigestSeconds: prefs?.emailDigestSeconds ?? 120,
+    whatsappEnabled: prefs?.whatsappEnabled ?? false,
+    whatsappPhoneE164: prefs?.whatsappPhoneE164 ?? null,
+    whatsappDigestSeconds: prefs?.whatsappDigestSeconds ?? 120,
   };
 }
 
@@ -390,6 +418,9 @@ export async function updateNotificationPreferences(
     pushEnabled?: boolean;
     soundEnabled?: boolean;
     emailDigestSeconds?: number;
+    whatsappEnabled?: boolean;
+    whatsappPhoneE164?: string | null;
+    whatsappDigestSeconds?: number;
   },
 ) {
   const db = getDatabase();
@@ -414,6 +445,20 @@ export async function updateNotificationPreferences(
     input.emailDigestSeconds !== undefined
       ? Math.min(3600, Math.max(30, Math.floor(input.emailDigestSeconds)))
       : undefined;
+  const waDigest =
+    input.whatsappDigestSeconds !== undefined
+      ? Math.min(3600, Math.max(30, Math.floor(input.whatsappDigestSeconds)))
+      : undefined;
+
+  let whatsappPhone: string | null | undefined = undefined;
+  if (input.whatsappPhoneE164 !== undefined) {
+    if (input.whatsappPhoneE164 === null || input.whatsappPhoneE164.trim() === "") {
+      whatsappPhone = null;
+    } else {
+      const { normalizeE164Phone } = await import("@/lib/notifications/whatsapp");
+      whatsappPhone = normalizeE164Phone(input.whatsappPhoneE164);
+    }
+  }
 
   const [existing] = await db
     .select()
@@ -438,6 +483,13 @@ export async function updateNotificationPreferences(
           ? { soundEnabled: input.soundEnabled }
           : {}),
         ...(digest !== undefined ? { emailDigestSeconds: digest } : {}),
+        ...(input.whatsappEnabled !== undefined
+          ? { whatsappEnabled: input.whatsappEnabled }
+          : {}),
+        ...(whatsappPhone !== undefined
+          ? { whatsappPhoneE164: whatsappPhone }
+          : {}),
+        ...(waDigest !== undefined ? { whatsappDigestSeconds: waDigest } : {}),
         updatedAt: new Date(),
       })
       .where(eq(notificationPreferences.membershipId, m.id))
@@ -455,6 +507,9 @@ export async function updateNotificationPreferences(
       pushEnabled: input.pushEnabled ?? true,
       soundEnabled: input.soundEnabled ?? true,
       emailDigestSeconds: digest ?? 120,
+      whatsappEnabled: input.whatsappEnabled ?? false,
+      whatsappPhoneE164: whatsappPhone ?? null,
+      whatsappDigestSeconds: waDigest ?? 120,
     })
     .returning();
   return created;

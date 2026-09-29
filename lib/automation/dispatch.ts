@@ -38,13 +38,6 @@ export async function flushAutomationEvents(
   organizationId: string,
 ): Promise<void> {
   await flushDomainEventOutbox(organizationId);
-  // Process durable notification push/email jobs that are due
-  try {
-    const { flushNotificationDeliveries } = await import(
-      "@/lib/notifications/notify"
-    );
-    await flushNotificationDeliveries(organizationId);
-  } catch {
-    // Never fail domain mutations due to notification delivery
-  }
+  // Notification delivery (push/email/whatsapp) is processed by the
+  // dedicated notification worker — not on the customer message path.
 }

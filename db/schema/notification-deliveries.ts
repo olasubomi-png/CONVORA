@@ -18,7 +18,7 @@ import { customers } from "./customers";
 
 export const notificationDeliveryChannelEnum = pgEnum(
   "notification_delivery_channel",
-  ["PUSH", "EMAIL"],
+  ["PUSH", "EMAIL", "WHATSAPP"],
 );
 
 export const notificationDeliveryStatusEnum = pgEnum(
@@ -34,6 +34,8 @@ export type NotificationDeliveryPayload = {
   conversationUrl?: string;
   messageCount?: number;
   messageId?: string;
+  /** Recipient phone for WHATSAPP channel (E.164). Never contains tokens. */
+  toPhoneE164?: string;
 };
 
 /**

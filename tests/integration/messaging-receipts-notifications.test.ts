@@ -313,3 +313,111 @@ describe("notification delivery outbox", () => {
     expect((count ?? 0) >= 2).toBe(true);
   });
 });
+
+
+describe("WhatsApp agent notifications", () => {
+  it("saves valid E.164 WhatsApp number", async () => {
+    const { owner, org } = await setup();
+    const prefs = await updateNotificationPreferences(
+      owner.id,
+      org.organizationId,
+      {
+        whatsappEnabled: true,
+        whatsappPhoneE164: "+2348012345678",
+      },
+    );
+    expect(prefs?.whatsappEnabled).toBe(true);
+    expect(prefs?.whatsappPhoneE164).toBe("+2348012345678");
+  });
+
+  it("rejects invalid WhatsApp number", async () => {
+    const { owner, org } = await setup();
+    await expect(
+      updateNotificationPreferences(owner.id, org.organizationId, {
+        whatsappPhoneE164: "08012345678",
+      }),
+    ).rejects.toThrow(/E\.164|valid WhatsApp/i);
+  });
+
+  it("does not queue WhatsApp when disabled", async () => {
+    const { owner, org, installation } = await setup();
+    await updateNotificationPreferences(owner.id, org.organizationId, {
+      whatsappEnabled: false,
+      whatsappPhoneE164: "+2348012345678",
+    });
+    const session = await createOrResumeVisitorSession({
+      publicKey: installation.publicKey,
+      origin: null,
+    });
+    await setVisitorIdentity(session.sessionToken, { displayName: "No WA" });
+    await sendVisitorMessage(session.sessionToken, "hello");
+    const jobs = await getTestDb()
+      .select()
+      .from(notificationDeliveries)
+      .where(
+        and(
+          eq(notificationDeliveries.organizationId, org.organizationId),
+          eq(notificationDeliveries.channel, "WHATSAPP"),
+        ),
+      );
+    expect(jobs.length).toBe(0);
+  });
+
+  it("queues WhatsApp delivery when enabled with number", async () => {
+    const { owner, org, installation } = await setup();
+    await updateNotificationPreferences(owner.id, org.organizationId, {
+      whatsappEnabled: true,
+      whatsappPhoneE164: "+2348099990000",
+      whatsappDigestSeconds: 120,
+    });
+    const session = await createOrResumeVisitorSession({
+      publicKey: installation.publicKey,
+      origin: null,
+    });
+    await setVisitorIdentity(session.sessionToken, { displayName: "WA User" });
+    await sendVisitorMessage(session.sessionToken, "need help");
+    const jobs = await getTestDb()
+      .select()
+      .from(notificationDeliveries)
+      .where(
+        and(
+          eq(notificationDeliveries.organizationId, org.organizationId),
+          eq(notificationDeliveries.channel, "WHATSAPP"),
+        ),
+      );
+    expect(jobs.length).toBe(1);
+    expect(jobs[0]?.status).toBe("PENDING");
+    const payload = jobs[0]?.payload as { toPhoneE164?: string };
+    expect(payload.toPhoneE164).toBe("+2348099990000");
+    expect(JSON.stringify(jobs[0]?.payload)).not.toMatch(/accessToken|Bearer|secret/i);
+  });
+
+  it("merges rapid WhatsApp alerts for same conversation", async () => {
+    const { owner, org, installation } = await setup();
+    await updateNotificationPreferences(owner.id, org.organizationId, {
+      whatsappEnabled: true,
+      whatsappPhoneE164: "+2348011112222",
+      whatsappDigestSeconds: 300,
+    });
+    const session = await createOrResumeVisitorSession({
+      publicKey: installation.publicKey,
+      origin: null,
+    });
+    await setVisitorIdentity(session.sessionToken, { displayName: "Spam" });
+    await sendVisitorMessage(session.sessionToken, "a");
+    await sendVisitorMessage(session.sessionToken, "b");
+    await sendVisitorMessage(session.sessionToken, "c");
+    const jobs = await getTestDb()
+      .select()
+      .from(notificationDeliveries)
+      .where(
+        and(
+          eq(notificationDeliveries.organizationId, org.organizationId),
+          eq(notificationDeliveries.channel, "WHATSAPP"),
+        ),
+      );
+    expect(jobs.length).toBe(1);
+    const count = (jobs[0]?.payload as { messageCount?: number })?.messageCount;
+    expect((count ?? 0) >= 2).toBe(true);
+  });
+});

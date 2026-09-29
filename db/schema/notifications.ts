@@ -77,6 +77,12 @@ export const notificationPreferences = pgTable("notification_preferences", {
   pushEnabled: boolean("push_enabled").notNull().default(true),
   soundEnabled: boolean("sound_enabled").notNull().default(true),
   emailDigestSeconds: integer("email_digest_seconds").notNull().default(120),
+  /** Agent opted in to receive WhatsApp alerts on their personal number. */
+  whatsappEnabled: boolean("whatsapp_enabled").notNull().default(false),
+  /** E.164 phone number for agent WhatsApp alerts (e.g. +2348012345678). */
+  whatsappPhoneE164: text("whatsapp_phone_e164"),
+  /** Cooldown window before another WhatsApp alert for the same conversation. */
+  whatsappDigestSeconds: integer("whatsapp_digest_seconds").notNull().default(120),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
