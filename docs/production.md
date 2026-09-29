@@ -425,3 +425,24 @@ Adds `media_assets.created_by_visitor_id` and `media_assets.consumed_by_message_
 - Chat media is private and bound to the uploading visitor or agent user.
 - Media can be attached to at most one message (single-use).
 - Apply `db/migrations/0025_media_ownership.sql` on production Neon after 0024.
+
+
+### Notification delivery worker
+
+CONVORA processes durable notification jobs (`notification_deliveries`) via:
+
+- **Route:** `GET|POST /api/notifications/worker`
+- **Vercel Cron:** `vercel.json` schedules `* * * * *` (every minute)
+- **Auth:** Vercel injects `Authorization: Bearer <CRON_SECRET>` when `CRON_SECRET` is set.
+  External schedulers may use `NOTIFICATION_WORKER_SECRET` (Bearer or `x-convora-worker-secret`).
+
+Jobs cover **PUSH**, **EMAIL**, and **WHATSAPP** agent alerts. Customer message requests only enqueue jobs; they never call providers synchronously.
+
+Platform WhatsApp agent alerts also require:
+
+- `WHATSAPP_NOTIFICATIONS_ACCESS_TOKEN`
+- `WHATSAPP_NOTIFICATIONS_PHONE_NUMBER_ID`
+- `WHATSAPP_NOTIFICATION_TEMPLATE_NAME`
+- `WHATSAPP_NOTIFICATION_TEMPLATE_LANG` (optional, default `en`)
+
+Approve the message template in Meta Business Manager before enabling WhatsApp alerts in production.

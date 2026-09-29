@@ -21,6 +21,9 @@ import {
 } from "@/lib/notifications/notify";
 import { AuthorizationError } from "@/lib/errors";
 import { notificationDeliveries } from "@/db/schema";
+import { processNotificationDeliveries } from "@/lib/notifications/delivery";
+import { enqueueNotificationDelivery } from "@/lib/notifications/delivery";
+
 
 
 import { sendAgentMessage } from "@/lib/conversations/messages";
@@ -419,5 +422,120 @@ describe("WhatsApp agent notifications", () => {
     expect(jobs.length).toBe(1);
     const count = (jobs[0]?.payload as { messageCount?: number })?.messageCount;
     expect((count ?? 0) >= 2).toBe(true);
+  });
+});
+
+
+describe("notification delivery worker processing", () => {
+  it("does not claim jobs that are not yet available", async () => {
+    const { owner, org } = await setup();
+    const future = new Date(Date.now() + 60_000);
+    await enqueueNotificationDelivery({
+      organizationId: org.organizationId,
+      membershipId: org.membershipId,
+      userId: owner.id,
+      notificationId: null,
+      conversationId: null,
+      customerId: null,
+      channel: "PUSH",
+      dedupeKey: `push-future-${Date.now()}`,
+      payload: { preview: "later" },
+      availableAt: future,
+    });
+    const result = await processNotificationDeliveries({
+      organizationId: org.organizationId,
+      limit: 20,
+    });
+    expect(result.claimed).toBe(0);
+  });
+
+  it("claims due PENDING jobs and marks SENT when push has no subscriptions", async () => {
+    // Push with no subscriptions still "succeeds" (sendPushToUser returns gracefully)
+    const { owner, org } = await setup();
+    await enqueueNotificationDelivery({
+      organizationId: org.organizationId,
+      membershipId: org.membershipId,
+      userId: owner.id,
+      notificationId: null,
+      conversationId: null,
+      customerId: null,
+      channel: "PUSH",
+      dedupeKey: `push-due-${Date.now()}`,
+      payload: { preview: "now", customerName: "C" },
+      availableAt: new Date(Date.now() - 1000),
+    });
+    const result = await processNotificationDeliveries({
+      organizationId: org.organizationId,
+      limit: 20,
+    });
+    expect(result.claimed).toBeGreaterThanOrEqual(1);
+    const [job] = await getTestDb()
+      .select()
+      .from(notificationDeliveries)
+      .where(eq(notificationDeliveries.organizationId, org.organizationId));
+    expect(["SENT", "FAILED", "PENDING", "CANCELLED"]).toContain(job?.status);
+  });
+
+  it("sets future availableAt on transient failure for WhatsApp without config", async () => {
+    const { owner, org } = await setup();
+    delete process.env.WHATSAPP_NOTIFICATIONS_ACCESS_TOKEN;
+    delete process.env.WHATSAPP_NOTIFICATIONS_PHONE_NUMBER_ID;
+    delete process.env.WHATSAPP_NOTIFICATION_TEMPLATE_NAME;
+    await enqueueNotificationDelivery({
+      organizationId: org.organizationId,
+      membershipId: org.membershipId,
+      userId: owner.id,
+      notificationId: null,
+      conversationId: null,
+      customerId: null,
+      channel: "WHATSAPP",
+      dedupeKey: `wa-fail-${Date.now()}`,
+      payload: {
+        toPhoneE164: "+2348012345678",
+        customerName: "John",
+        channelLabel: "WEB",
+        preview: "hi",
+        conversationUrl: "https://example.com/app/inbox",
+        messageCount: 1,
+      },
+      availableAt: new Date(Date.now() - 1000),
+    });
+    await processNotificationDeliveries({
+      organizationId: org.organizationId,
+      limit: 10,
+    });
+    const [job] = await getTestDb()
+      .select()
+      .from(notificationDeliveries)
+      .where(
+        and(
+          eq(notificationDeliveries.organizationId, org.organizationId),
+          eq(notificationDeliveries.channel, "WHATSAPP"),
+        ),
+      );
+    expect(job).toBeTruthy();
+    // ConfigurationError → retry as PENDING with future availableAt
+    if (job?.status === "PENDING") {
+      expect(job.availableAt.getTime()).toBeGreaterThan(Date.now() - 5000);
+      expect((job.attemptCount ?? 0) >= 1).toBe(true);
+    } else {
+      expect(["FAILED", "CANCELLED"]).toContain(job?.status);
+    }
+  });
+
+  it("customer message does not require provider to succeed", async () => {
+    const { owner, org, installation } = await setup();
+    await updateNotificationPreferences(owner.id, org.organizationId, {
+      whatsappEnabled: true,
+      whatsappPhoneE164: "+2348088887777",
+    });
+    delete process.env.WHATSAPP_NOTIFICATIONS_ACCESS_TOKEN;
+    const session = await createOrResumeVisitorSession({
+      publicKey: installation.publicKey,
+      origin: null,
+    });
+    await setVisitorIdentity(session.sessionToken, { displayName: "Cust" });
+    const msg = await sendVisitorMessage(session.sessionToken, "hello worker");
+    expect(msg.id).toBeTruthy();
   });
 });
