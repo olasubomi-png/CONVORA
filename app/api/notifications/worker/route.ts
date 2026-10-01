@@ -8,7 +8,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_LIMIT = 40;
-const MAX_LIMIT = 50;
 
 /**
  * Durable notification delivery worker (PUSH / EMAIL / WHATSAPP).
@@ -59,6 +58,3 @@ export async function POST(request: Request) {
   void request;
   return handleWorker();
 }
-
-/** Exported for tests. */
-export const WORKER_BATCH_LIMIT = { DEFAULT_LIMIT, MAX_LIMIT };
