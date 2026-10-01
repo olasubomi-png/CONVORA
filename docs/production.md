@@ -432,9 +432,10 @@ Adds `media_assets.created_by_visitor_id` and `media_assets.consumed_by_message_
 CONVORA processes durable notification jobs (`notification_deliveries`) via:
 
 - **Route:** `GET|POST /api/notifications/worker`
-- **Vercel Cron:** `vercel.json` schedules `* * * * *` (every minute)
-- **Auth:** Vercel injects `Authorization: Bearer <CRON_SECRET>` when `CRON_SECRET` is set.
-  External schedulers may use `NOTIFICATION_WORKER_SECRET` (Bearer or `x-convora-worker-secret`).
+- **Vercel Cron:** `vercel.json` schedules `0 0 * * *` (daily). Vercel Hobby only allows daily cron intervals; Pro supports once-per-minute (`* * * * *`).
+- **Frequent drain:** GitHub Actions workflow `notification-worker.yml` runs every 5 minutes when repository secrets `CONVORA_APP_URL` and `CRON_SECRET` (or `NOTIFICATION_WORKER_SECRET`) are set.
+- **Auth:** Vercel Cron injects `Authorization: Bearer <CRON_SECRET>` when `CRON_SECRET` is set.
+  External schedulers / GHA may use the same Bearer secret or `NOTIFICATION_WORKER_SECRET`.
 
 Jobs cover **PUSH**, **EMAIL**, and **WHATSAPP** agent alerts. Customer message requests only enqueue jobs; they never call providers synchronously.
 
