@@ -447,3 +447,24 @@ Platform WhatsApp agent alerts also require:
 - `WHATSAPP_NOTIFICATION_TEMPLATE_LANG` (optional, default `en`)
 
 Approve the message template in Meta Business Manager before enabling WhatsApp alerts in production.
+
+
+### Agent email notifications (Resend)
+
+Email is the primary external alert channel for agents. Recipient is always the
+authenticated user's `users.email` — agents do not configure a separate address.
+
+Required environment variables (optional until email delivery is enabled):
+
+```
+RESEND_API_KEY=
+EMAIL_FROM=CONVORA <notifications@your-verified-domain.com>
+```
+
+`EMAIL_FROM` must use a domain verified in Resend. Do not use an unverified domain.
+
+Flow:
+
+Customer message → `notification_deliveries` (EMAIL) → `/api/notifications/worker` → Resend → agent login email
+
+Customer message creation does not depend on Resend availability.

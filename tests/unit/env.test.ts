@@ -126,3 +126,27 @@ describe("validateProductionEnv", () => {
     expect(issues).toEqual([]);
   });
 });
+
+  it("parses optional RESEND_API_KEY and EMAIL_FROM without requiring them", () => {
+    const result = parseServerEnv({
+      ...valid,
+      RESEND_API_KEY: "re_test_key",
+      EMAIL_FROM: "CONVORA <notifications@example.com>",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.RESEND_API_KEY).toBe("re_test_key");
+      expect(result.data.EMAIL_FROM).toBe(
+        "CONVORA <notifications@example.com>",
+      );
+    }
+  });
+
+  it("succeeds when email configuration is omitted", () => {
+    const result = parseServerEnv(valid);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.RESEND_API_KEY).toBeUndefined();
+      expect(result.data.EMAIL_FROM).toBeUndefined();
+    }
+  });

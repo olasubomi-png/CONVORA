@@ -179,9 +179,9 @@ export async function processNotificationDeliveries(options?: {
           url: payload.conversationUrl ?? undefined,
         });
       } else if (row.channel === "EMAIL") {
-        // Recipient is resolved at enqueue time into payload? We need email on user
-        // Re-fetch is safer — no email stored in payload for privacy
+        // Recipient is always resolved server-side from users.email (never from payload).
         const { users } = await import("@/db/schema");
+        const { isEmailConfigured } = await import("@/lib/notifications/email");
         const [u] = await db
           .select({ email: users.email })
           .from(users)
@@ -193,6 +193,17 @@ export async function processNotificationDeliveries(options?: {
             .set({
               status: "CANCELLED",
               lastError: "No email on user",
+              updatedAt: new Date(),
+            })
+            .where(eq(notificationDeliveries.id, id));
+          continue;
+        }
+        if (!isEmailConfigured()) {
+          await db
+            .update(notificationDeliveries)
+            .set({
+              status: "CANCELLED",
+              lastError: "Email provider is not configured",
               updatedAt: new Date(),
             })
             .where(eq(notificationDeliveries.id, id));
@@ -210,9 +221,10 @@ export async function processNotificationDeliveries(options?: {
           messageCount: payload.messageCount ?? 1,
         });
         if (!ok) {
-          throw new Error("Email provider rejected or is not configured");
+          throw new Error("Email provider rejected the message");
         }
       } else if (row.channel === "WHATSAPP") {
+
         const { sendWhatsAppNotification } = await import(
           "@/lib/notifications/whatsapp"
         );

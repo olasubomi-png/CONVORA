@@ -5,6 +5,7 @@ import {
   getNotificationPreferences,
   updateNotificationPreferences,
 } from "@/lib/notifications/notify";
+import { isEmailConfigured } from "@/lib/notifications/email";
 import { parseInput, z } from "@/lib/validation";
 import { ValidationError } from "@/lib/errors";
 
@@ -34,7 +35,12 @@ export async function GET(request: Request) {
       auth.user.id,
       organizationId,
     );
-    return NextResponse.json({ preferences: prefs });
+    return NextResponse.json({
+      preferences: prefs,
+      /** Authenticated account email — notifications are always sent here. */
+      accountEmail: auth.user.email,
+      emailProviderConfigured: isEmailConfigured(),
+    });
   } catch (error) {
     return jsonError(error);
   }
@@ -50,7 +56,11 @@ export async function PATCH(request: Request) {
       input.organizationId,
       input,
     );
-    return NextResponse.json({ preferences: prefs });
+    return NextResponse.json({
+      preferences: prefs,
+      accountEmail: auth.user.email,
+      emailProviderConfigured: isEmailConfigured(),
+    });
   } catch (error) {
     return jsonError(error);
   }
