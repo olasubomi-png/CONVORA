@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Container } from "@/components/ui/container";
+import { BrandLogo } from "@/components/brand-logo";
 
 const links = [
   { href: "#product", label: "Product" },
@@ -11,14 +12,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--cv-border)] bg-white/90 backdrop-blur">
       <Container className="flex h-16 items-center justify-between">
-        <Link href="/#top" className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--cv-accent)] text-sm font-bold text-white">
-            C
-          </span>
-          <span className="text-sm font-semibold tracking-[0.14em] text-[var(--cv-fg)]">
-            CONVORA
-          </span>
-        </Link>
+        <BrandLogo href="/#top" size={32} priority />
         <nav aria-label="Primary" className="hidden md:block">
           <ul className="flex items-center gap-8 text-sm text-[var(--cv-fg-secondary)]">
             {links.map((link) => (

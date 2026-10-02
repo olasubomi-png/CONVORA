@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BrandLogo } from "@/components/brand-logo";
 import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/auth-form";
 import { registerAction } from "@/app/actions/auth";
@@ -11,12 +12,7 @@ export default async function RegisterPage() {
   return (
     <div className="flex min-h-screen flex-col bg-[var(--cv-bg)] lg:flex-row">
       <div className="hidden flex-1 flex-col justify-between bg-[var(--cv-sidebar)] p-10 text-white lg:flex">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--cv-accent)] text-sm font-bold">
-            C
-          </span>
-          <span className="text-sm font-semibold tracking-[0.14em]">CONVORA</span>
-        </Link>
+        <BrandLogo href="/" size={32} wordmarkClassName="text-white" />
         <div>
           <h1 className="max-w-sm text-3xl font-semibold leading-tight tracking-tight">
             Start your 90-day free trial.
@@ -30,12 +26,9 @@ export default async function RegisterPage() {
       </div>
       <div className="flex flex-1 flex-col justify-center px-6 py-12">
         <div className="mx-auto w-full max-w-md">
-          <Link href="/" className="mb-8 flex items-center gap-2 lg:hidden">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--cv-accent)] text-sm font-bold text-white">
-              C
-            </span>
-            <span className="text-sm font-semibold tracking-[0.14em]">CONVORA</span>
-          </Link>
+          <div className="mb-8 lg:hidden">
+            <BrandLogo href="/" size={32} />
+          </div>
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--cv-fg)]">
             Create account
           </h1>

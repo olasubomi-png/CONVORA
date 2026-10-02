@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Suspense, useState } from "react";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { BrandLogo } from "@/components/brand-logo";
 
 type NavItem = {
   href: string;
@@ -95,12 +96,7 @@ export function AppShell({
   const sidebar = (
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center gap-2.5 border-b border-white/5 px-4">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--cv-accent)] text-sm font-bold text-white">
-          C
-        </span>
-        <span className="text-sm font-semibold tracking-[0.14em] text-white">
-          CONVORA
-        </span>
+        <BrandLogo href="/app" size={32} wordmarkClassName="text-white" />
       </div>
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4" aria-label="Workspace">
@@ -147,12 +143,7 @@ export function AppShell({
     return (
       <div className="min-h-screen bg-[var(--cv-bg)]">
         <header className="border-b border-[var(--cv-border)] bg-white px-4 py-3">
-          <Link href="/app" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--cv-accent)] text-sm font-bold text-white">
-              C
-            </span>
-            <span className="text-sm font-semibold tracking-[0.14em]">CONVORA</span>
-          </Link>
+          <BrandLogo href="/app" size={32} />
         </header>
         <main>{children}</main>
       </div>
